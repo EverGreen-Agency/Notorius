@@ -7,8 +7,13 @@ export function HowItWorks() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [progress, setProgress] = useState(0);
 
+  const [isMobile, setIsMobile] = useState(false);
+
   useEffect(() => {
     const handleScroll = () => {
+      const mobileCheck = window.innerWidth < 640;
+      setIsMobile(mobileCheck);
+
       const container = containerRef.current;
       if (!container) return;
 
@@ -73,9 +78,9 @@ export function HowItWorks() {
     return (progress - start) / (end - start);
   };
 
-  // Card dimensions for horizontal shift calculation
-  const cardWidth = 310; // width of each card in px
-  const gapWidth = 90;   // line connector width in px
+  // Responsive Card dimensions for exact center-stop on final card
+  const cardWidth = isMobile ? 270 : 310;
+  const gapWidth = isMobile ? 60 : 80;
   const stepDist = cardWidth + gapWidth;
   const totalShift = (steps.length - 1) * stepDist;
   const currentTranslateX = -progress * totalShift;
@@ -148,8 +153,8 @@ export function HowItWorks() {
           <div
             className="flex items-center"
             style={{
-              paddingLeft: 'calc(50vw - 155px)',
-              paddingRight: 'calc(50vw - 155px)',
+              paddingLeft: `calc(50vw - ${cardWidth / 2}px)`,
+              paddingRight: `calc(50vw - ${cardWidth / 2}px)`,
               transform: `translate3d(${currentTranslateX}px, 0, 0)`,
               willChange: 'transform',
             }}

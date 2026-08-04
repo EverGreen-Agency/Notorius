@@ -19,7 +19,9 @@ import {
 export function FAQ() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [dragStartX, setDragStartX] = useState<number | null>(null);
+  const [dragOffset, setDragOffset] = useState<number>(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [swipingCard, setSwipingCard] = useState<'left' | 'right' | null>(null);
 
   const faqs = [
     {
@@ -104,52 +106,40 @@ export function FAQ() {
     setActiveIndex((prev) => (prev < faqs.length - 1 ? prev + 1 : 0));
   };
 
-  // Drag handlers for desktop mouse drag
-  const handleMouseDown = (e: React.MouseEvent) => {
-    setDragStartX(e.clientX);
+  // Drag handlers for Tinder-style swipe
+  const handleDragStart = (clientX: number) => {
+    setDragStartX(clientX);
     setIsDragging(true);
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
+  const handleDragMove = (clientX: number) => {
     if (!isDragging || dragStartX === null) return;
-    const diff = e.clientX - dragStartX;
-    if (diff > 50) {
-      handlePrev();
-      setIsDragging(false);
-      setDragStartX(null);
-    } else if (diff < -50) {
-      handleNext();
-      setIsDragging(false);
-      setDragStartX(null);
+    const diff = clientX - dragStartX;
+    setDragOffset(diff);
+  };
+
+  const handleDragEnd = () => {
+    if (!isDragging) return;
+
+    const threshold = 75; // threshold in px to trigger swipe action
+    if (dragOffset > threshold) {
+      setSwipingCard('right');
+      setTimeout(() => {
+        handlePrev();
+        setSwipingCard(null);
+        setDragOffset(0);
+      }, 150);
+    } else if (dragOffset < -threshold) {
+      setSwipingCard('left');
+      setTimeout(() => {
+        handleNext();
+        setSwipingCard(null);
+        setDragOffset(0);
+      }, 150);
+    } else {
+      setDragOffset(0);
     }
-  };
 
-  const handleMouseUp = () => {
-    setIsDragging(false);
-    setDragStartX(null);
-  };
-
-  // Touch handlers for mobile swipe
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setDragStartX(e.touches[0].clientX);
-    setIsDragging(true);
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isDragging || dragStartX === null) return;
-    const diff = e.touches[0].clientX - dragStartX;
-    if (diff > 40) {
-      handlePrev();
-      setIsDragging(false);
-      setDragStartX(null);
-    } else if (diff < -40) {
-      handleNext();
-      setIsDragging(false);
-      setDragStartX(null);
-    }
-  };
-
-  const handleTouchEnd = () => {
     setIsDragging(false);
     setDragStartX(null);
   };
@@ -170,20 +160,23 @@ export function FAQ() {
           <p className="text-xs sm:text-sm text-[var(--text-secondary)]">Deslize para ver as respostas completas de forma rápida.</p>
         </div>
 
-        {/* 3D Deck Container */}
+        {/* 3D Tinder Deck Container */}
         <div
           className="relative min-h-[380px] sm:min-h-[400px] flex items-center justify-center select-none touch-pan-y"
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
+          onMouseDown={(e) => handleDragStart(e.clientX)}
+          onMouseMove={(e) => handleDragMove(e.clientX)}
+          onMouseUp={handleDragEnd}
+          onMouseLeave={handleDragEnd}
+          onTouchStart={(e) => handleDragStart(e.touches[0].clientX)}
+          onTouchMove={(e) => handleDragMove(e.touches[0].clientX)}
+          onTouchEnd={handleDragEnd}
         >
           {/* Navigation Arrow Left */}
           <button
-            onClick={handlePrev}
+            onClick={(e) => {
+              e.stopPropagation();
+              handlePrev();
+            }}
             aria-label="Pergunta anterior"
             className="absolute left-0 sm:left-4 z-30 w-11 h-11 rounded-full bg-[var(--navy-900)] border border-[var(--gold-500)]/40 text-[var(--gold-300)] flex items-center justify-center shadow-lg hover:border-[var(--gold-300)] hover:scale-110 active:scale-95 transition-all duration-200"
           >
@@ -204,8 +197,17 @@ export function FAQ() {
               let zIndex = 0;
 
               if (isCurrent) {
-                transformStyle = 'translate3d(0, 0, 0) scale(1) rotate(0deg)';
-                opacity = 1;
+                if (swipingCard === 'left') {
+                  transformStyle = 'translate3d(-140%, 0, 0) rotate(-25deg)';
+                  opacity = 0;
+                } else if (swipingCard === 'right') {
+                  transformStyle = 'translate3d(140%, 0, 0) rotate(25deg)';
+                  opacity = 0;
+                } else {
+                  const rotateDeg = dragOffset * 0.08;
+                  transformStyle = `translate3d(${dragOffset}px, 0, 0) scale(1) rotate(${rotateDeg}deg)`;
+                  opacity = 1;
+                }
                 zIndex = 20;
               } else if (offset === 1) {
                 transformStyle = 'translate3d(55%, 0, -100px) scale(0.88) rotateY(-12deg)';
@@ -228,17 +230,19 @@ export function FAQ() {
               return (
                 <div
                   key={faq.id}
-                  onClick={() => setActiveIndex(idx)}
+                  onClick={() => !isDragging && setActiveIndex(idx)}
                   style={{
                     transform: transformStyle,
                     opacity: opacity,
                     zIndex: zIndex,
                     perspective: '1000px',
+                    transition: isDragging && isCurrent ? 'none' : 'all 350ms cubic-bezier(0.2, 0.8, 0.2, 1)',
                   }}
-                  className={`absolute inset-0 m-auto w-full max-w-[340px] sm:max-w-[420px] h-[340px] sm:h-[360px] card-solid p-6 sm:p-7 rounded-3xl cursor-pointer transition-all duration-500 ease-out flex flex-col justify-between border ${isCurrent
+                  className={`absolute inset-0 m-auto w-full max-w-[340px] sm:max-w-[420px] h-[340px] sm:h-[360px] card-solid p-6 sm:p-7 rounded-3xl cursor-grab active:cursor-grabbing flex flex-col justify-between border ${
+                    isCurrent
                       ? 'border-[var(--gold-500)] bg-[var(--navy-900)] shadow-[0_20px_50px_-15px_rgba(221,188,131,0.25),0_0_35px_-5px_rgba(47,123,255,0.35)]'
                       : 'border-[var(--border-subtle)] bg-[var(--navy-950)] hover:opacity-75'
-                    }`}
+                  }`}
                 >
                   {/* Card Header: Category & Badge */}
                   <div>
