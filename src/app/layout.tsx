@@ -15,7 +15,7 @@ const fontSans = Manrope({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://notorius.ai'),
+  metadataBase: new URL('https://notorios.com.br'),
   title: 'Notorius — Presença Digital que se Percebe',
   description: 'Pacotes automatizados de visualizações e interações para Reels e publicações do Instagram. Pagamento único via Pix, sem senha e 100% automático.',
   keywords: [
@@ -28,7 +28,7 @@ export const metadata: Metadata = {
     'presenca digital',
   ],
   alternates: {
-    canonical: 'https://notorius.ai',
+    canonical: 'https://notorios.com.br',
   },
   icons: {
     icon: '/logo.svg',
@@ -38,7 +38,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Notorius — Presença Digital que se Percebe',
     description: 'Pacotes automatizados de visualizações e interações para Reels e publicações do Instagram. Pagamento único via Pix, sem senha e 100% automático.',
-    url: 'https://notorius.ai',
+    url: 'https://notorios.com.br',
     siteName: 'Notorius',
     images: [
       {

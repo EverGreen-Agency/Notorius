@@ -7,6 +7,6 @@ export default function robots(): MetadataRoute.Robots {
       allow: '/',
       disallow: ['/admin/', '/api/'],
     },
-    sitemap: 'https://notorius.ai/sitemap.xml',
+    sitemap: 'https://notorios.com.br/sitemap.xml',
   };
 }

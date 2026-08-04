@@ -171,8 +171,7 @@ export function HowItWorks() {
 
                   {/* Step Card */}
                   <div
-                    onClick={() => setActiveStep(idx)}
-                    className={`w-[270px] sm:w-[310px] shrink-0 card-solid p-5 rounded-2xl relative transition-all duration-300 cursor-pointer ${isActive
+                    className={`w-[270px] sm:w-[310px] shrink-0 card-solid p-5 rounded-2xl relative transition-all duration-300 ${isActive
                       ? 'border-[var(--gold-500)] shadow-[0_15px_35px_-10px_rgba(221,188,131,0.3),0_0_25px_-5px_rgba(47,123,255,0.4)] bg-[var(--navy-900)] scale-105 z-20'
                       : isPast
                         ? 'border-[var(--sapphire-action)]/50 bg-[var(--navy-900)]/80 opacity-90 scale-95'

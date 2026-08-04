@@ -18,27 +18,27 @@ export default function HomePage() {
     '@graph': [
       {
         '@type': 'Organization',
-        '@id': 'https://notorius.ai/#organization',
+        '@id': 'https://notorios.com.br/#organization',
         name: 'Notorius',
-        url: 'https://notorius.ai',
-        logo: 'https://notorius.ai/logo.svg',
+        url: 'https://notorios.com.br',
+        logo: 'https://notorios.com.br/logo.svg',
         sameAs: ['https://www.instagram.com/notorius.ai/'],
         description: 'Plataforma automatizada de impulsionamento e presença digital para Instagram.',
       },
       {
         '@type': 'WebSite',
-        '@id': 'https://notorius.ai/#website',
-        url: 'https://notorius.ai',
+        '@id': 'https://notorios.com.br/#website',
+        url: 'https://notorios.com.br',
         name: 'Notorius',
-        publisher: { '@id': 'https://notorius.ai/#organization' },
+        publisher: { '@id': 'https://notorios.com.br/#organization' },
         inLanguage: 'pt-BR',
       },
       {
         '@type': 'Product',
-        '@id': 'https://notorius.ai/#product',
+        '@id': 'https://notorios.com.br/#product',
         name: 'Pacotes de Presença & Engajamento Instagram - Notorius',
         description: 'Pacotes automatizados de visualizações e interações para Reels e publicações do Instagram. Pagamento único via Pix, sem senha e 100% automático.',
-        brand: { '@id': 'https://notorius.ai/#organization' },
+        brand: { '@id': 'https://notorios.com.br/#organization' },
         offers: {
           '@type': 'AggregateOffer',
           priceCurrency: 'BRL',
@@ -52,7 +52,7 @@ export default function HomePage() {
               price: '9.90',
               priceCurrency: 'BRL',
               availability: 'https://schema.org/InStock',
-              url: 'https://notorius.ai/checkout?package=start',
+              url: 'https://notorios.com.br/checkout?package=start',
             },
             {
               '@type': 'Offer',
@@ -60,7 +60,7 @@ export default function HomePage() {
               price: '19.90',
               priceCurrency: 'BRL',
               availability: 'https://schema.org/InStock',
-              url: 'https://notorius.ai/checkout?package=impulso',
+              url: 'https://notorios.com.br/checkout?package=impulso',
             },
             {
               '@type': 'Offer',
@@ -68,7 +68,7 @@ export default function HomePage() {
               price: '49.90',
               priceCurrency: 'BRL',
               availability: 'https://schema.org/InStock',
-              url: 'https://notorius.ai/checkout?package=autoridade',
+              url: 'https://notorios.com.br/checkout?package=autoridade',
             },
             {
               '@type': 'Offer',
@@ -76,14 +76,14 @@ export default function HomePage() {
               price: '99.90',
               priceCurrency: 'BRL',
               availability: 'https://schema.org/InStock',
-              url: 'https://notorius.ai/checkout?package=dominio',
+              url: 'https://notorios.com.br/checkout?package=dominio',
             },
           ],
         },
       },
       {
         '@type': 'FAQPage',
-        '@id': 'https://notorius.ai/#faq',
+        '@id': 'https://notorios.com.br/#faq',
         mainEntity: [
           {
             '@type': 'Question',

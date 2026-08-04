@@ -1,4 +1,4 @@
-import { NextResponse } from 'next';
+import { NextResponse } from 'next/server';
 import { validatePushinPayWebhook, getPushinPayPixStatus } from '@/lib/pushinpay';
 import { handleLateWebhookPayment } from '@/lib/fulfillment-orchestrator';
 
