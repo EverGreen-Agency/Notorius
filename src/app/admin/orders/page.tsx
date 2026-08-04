@@ -26,10 +26,17 @@ export default function AdminOrdersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterFulfillment, setFilterFulfillment] = useState<string>('all');
 
+  const [adminKey, setAdminKey] = useState<string>('');
+
   const fetchAdminOrders = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/admin/orders');
+      const keyToUse = adminKey || (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('key') || '' : '');
+      const res = await fetch('/api/admin/orders', {
+        headers: {
+          'x-admin-key': keyToUse,
+        },
+      });
       if (res.ok) {
         const data = await res.json();
         setOrders(data.orders || []);

@@ -73,3 +73,18 @@ CREATE INDEX IF NOT EXISTS idx_payments_provider_payment_id ON public.payments(p
 CREATE INDEX IF NOT EXISTS idx_payments_order_id ON public.payments(order_id);
 CREATE INDEX IF NOT EXISTS idx_fulfillment_items_order_id ON public.fulfillment_items(order_id);
 CREATE INDEX IF NOT EXISTS idx_order_events_order_id ON public.order_events(order_id);
+
+-- ================================================================
+-- HABILITAR SEGURANÇA ROW LEVEL SECURITY (RLS) - BLOQUEIO DE ACESSO PÚBLICO
+-- ================================================================
+ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fulfillment_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.order_events ENABLE ROW LEVEL SECURITY;
+
+-- Bloqueia leituras/escritas anônimas diretas no Supabase REST API (Segurança Zero-Trust)
+-- Apenas o servidor Backend via Service Role Key tem permissão total de acesso.
+REVOKE ALL ON public.orders FROM anon, authenticated;
+REVOKE ALL ON public.payments FROM anon, authenticated;
+REVOKE ALL ON public.fulfillment_items FROM anon, authenticated;
+REVOKE ALL ON public.order_events FROM anon, authenticated;
