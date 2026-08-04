@@ -1,26 +1,185 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    /* Foundations: Deep Obsidian & Midnight Navy */
+    --ink-1000: #000000;
+    --ink-950: #05070d;
+    --navy-950: #070e27;
+    --navy-900: #0a1326;
+    --navy-800: #0d2654;
+    
+    --bg-dark: #05070d;
+    --bg-surface: #0a1326;
+    --bg-elevated: #0e1935;
+    
+    /* Sapphire Signal */
+    --sapphire-700: #0e3d83;
+    --sapphire-600: #0e51b3;
+    --sapphire-500: #1c66d1;
+    --sapphire-action: #2f7bff;
+    --sapphire-soft: #9bc2ff;
+
+    /* Imperial Aged Gold */
+    --gold-900: #392212;
+    --gold-800: #624625;
+    --gold-700: #85673f;
+    --gold-500: #b08f60;
+    --gold-300: #ddbc83;
+    --gold-light: #f4e4c1;
+
+    /* Gradients */
+    --gold-gradient: linear-gradient(135deg, #f4e4c1 0%, #ddbc83 35%, #b08f60 70%, #85673f 100%);
+    --gold-border-gradient: linear-gradient(135deg, rgba(221, 188, 131, 0.6) 0%, rgba(133, 103, 63, 0.25) 50%, rgba(221, 188, 131, 0.8) 100%);
+    --sapphire-glow-gradient: radial-gradient(circle at 50% 0%, rgba(47, 123, 255, 0.25) 0%, rgba(10, 19, 38, 0) 70%);
+
+    /* Text Hierarchy */
+    --text-primary: #f7f4ec;
+    --text-secondary: #9bc2ff;
+    --text-muted: #616d7e;
+
+    /* Borders */
+    --border-subtle: rgba(221, 188, 131, 0.12);
+    --border-strong: rgba(221, 188, 131, 0.35);
+
+    /* Semantic */
+    --success: #49b887;
+    --warning: #e7a849;
+    --danger: #e6626a;
+    --info: #2f7bff;
+  }
+
+  body {
+    background-color: var(--ink-950);
+    color: var(--text-primary);
+    font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+    overflow-x: hidden;
+    background-image: 
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(14, 81, 179, 0.22), transparent),
+      radial-gradient(ellipse 60% 40% at 50% 120%, rgba(57, 34, 18, 0.18), transparent);
+  }
+
+  .font-display {
+    font-family: var(--font-display), Georgia, serif;
+  }
+
+  /* Accessibility Focus Ring (WCAG 2.1 AA) */
+  *:focus-visible {
+    outline: 2px solid var(--gold-300);
+    outline-offset: 2px;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Gold Foil Text Utility */
+.gold-foil-text {
+  background: var(--gold-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: inline-block;
 }
+
+/* Glassmorphism Header Overlay */
+.glass-header {
+  background: rgba(5, 7, 13, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(221, 188, 131, 0.15);
+}
+
+/* Expressive Metallic Gold Border Card */
+.card-solid {
+  background: var(--navy-900);
+  border: 1px solid var(--border-subtle);
+  border-radius: 1.25rem;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s ease, box-shadow 0.25s ease;
+  box-shadow: 0 10px 30px -15px rgba(0, 0, 0, 0.7);
+}
+
+.card-solid:hover {
+  border-color: var(--gold-500);
+  transform: translateY(-3px);
+  box-shadow: 0 20px 40px -15px rgba(221, 188, 131, 0.15), 0 0 25px -5px rgba(47, 123, 255, 0.25);
+}
+
+/* Featured Sapphire & Gold Crown Card */
+.card-featured {
+  background: linear-gradient(180deg, #0e2147 0%, #0a1326 100%);
+  border: 1px solid transparent;
+  border-image: var(--gold-border-gradient) 1;
+  border-radius: 1.25rem;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
+  box-shadow: 0 20px 50px -10px rgba(47, 123, 255, 0.35), 0 0 30px -5px rgba(221, 188, 131, 0.25);
+}
+
+.card-featured:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 25px 60px -10px rgba(47, 123, 255, 0.45), 0 0 40px -5px rgba(221, 188, 131, 0.35);
+}
+
+/* Keyframes for Ornate Brand Motion */
+@keyframes medallion-pulse {
+  0%, 100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 20px rgba(47, 123, 255, 0.3)) drop-shadow(0 0 35px rgba(221, 188, 131, 0.2));
+  }
+  50% {
+    transform: scale(1.02);
+    filter: drop-shadow(0 0 35px rgba(47, 123, 255, 0.5)) drop-shadow(0 0 50px rgba(221, 188, 131, 0.4));
+  }
+}
+
+@keyframes ring-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes ring-rotate-reverse {
+  from { transform: rotate(360deg); }
+  to { transform: rotate(0deg); }
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-marquee {
+  display: flex;
+  width: max-content;
+  animation: marquee 35s linear infinite;
+}
+
+.animate-medallion {
+  animation: medallion-pulse 8s ease-in-out infinite;
+}
+
+.animate-ring-slow {
+  animation: ring-rotate 24s linear infinite;
+}
+
+.animate-ring-reverse {
+  animation: ring-rotate-reverse 32s linear infinite;
+}
+
+/* Cold Ivory Checkout Form Card */
+.card-checkout-ivory {
+  background-color: #f7f4ec;
+  color: #05070d;
+  border: 1px solid rgba(221, 188, 131, 0.3);
+  box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.4);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #05070d;
+}
+::-webkit-scrollbar-thumb {
+  background: #1c2b4a;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #ddbc83;
+}
+
