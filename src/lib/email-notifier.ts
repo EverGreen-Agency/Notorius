@@ -53,7 +53,7 @@ export async function sendEmergencyAlertEmail(params: EmergencyAlertParams): Pro
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: 'alertas@notorios.com.br',
+          from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
           to: [adminEmail],
           subject,
           html: htmlBody,
@@ -144,7 +144,7 @@ export async function sendSaleNotificationEmail(params: SaleNotificationParams):
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: 'vendas@notorios.com.br',
+          from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
           to: [adminEmail],
           subject,
           html: htmlBody,
