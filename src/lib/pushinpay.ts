@@ -81,6 +81,50 @@ export async function createPushinPayPix(req: CreatePixRequest): Promise<CreateP
   };
 }
 
+export async function getPushinPayPixStatus(pixId: string): Promise<{
+  id: string;
+  status: string;
+  valueCents: number;
+  paidAt?: string;
+  rawResponse: Record<string, unknown>;
+}> {
+  const token = process.env.PUSHINPAY_TOKEN;
+
+  if (!token || token === 'mock_token') {
+    return {
+      id: pixId,
+      status: 'paid',
+      valueCents: 1990,
+      rawResponse: { id: pixId, status: 'paid', is_mock: true },
+    };
+  }
+
+  const response = await fetch(`https://api.pushinpay.com.br/api/pix/cashIn/${pixId}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Pushin Pay status lookup error (${response.status}): ${errorText}`);
+  }
+
+  const data = await response.json();
+  const rawStatus = String(data.status || data.payment_status || '').toLowerCase();
+  const rawValue = Number(data.value || data.value_cents || data.amount || 0);
+
+  return {
+    id: data.id || pixId,
+    status: rawStatus,
+    valueCents: rawValue,
+    paidAt: data.paid_at || data.paidAt,
+    rawResponse: data,
+  };
+}
+
 export function validatePushinPayWebhook(payload: unknown): PushinPayWebhookPayload | null {
   if (!payload || typeof payload !== 'object') {
     return null;
