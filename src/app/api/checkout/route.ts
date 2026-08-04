@@ -75,8 +75,8 @@ export async function POST(request: Request) {
       `Pedido gerado para ${pkg.name} com ${selectedBumpsInfo.length} order bump(s). Total: R$ ${(totalAmountCents / 100).toFixed(2)}.`
     );
 
-    // Host URL for webhook callback
-    const origin = request.headers.get('origin') || 'http://localhost:3000';
+    // Host URL for webhook callback (prioritizes production environment variable NEXT_PUBLIC_SITE_URL)
+    const origin = process.env.NEXT_PUBLIC_SITE_URL || request.headers.get('origin') || 'http://localhost:3000';
     const webhookUrl = `${origin}/api/webhooks/pushinpay`;
 
     // Generate Pix via Pushin Pay for total amount
