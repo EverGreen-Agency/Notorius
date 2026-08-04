@@ -103,10 +103,11 @@
 
 /* Featured Sapphire & Gold Crown Card */
 .card-featured {
-  background: linear-gradient(180deg, #0e2147 0%, #0a1326 100%);
+  background: 
+    linear-gradient(180deg, #0e2147 0%, #0a1326 100%) padding-box,
+    linear-gradient(135deg, rgba(244, 228, 193, 0.85) 0%, rgba(221, 188, 131, 0.45) 45%, rgba(133, 103, 63, 0.35) 75%, rgba(244, 228, 193, 0.9) 100%) border-box;
   border: 1px solid transparent;
-  border-image: var(--gold-border-gradient) 1;
-  border-radius: 1.25rem;
+  border-radius: 1rem;
   transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
   box-shadow: 0 20px 50px -10px rgba(47, 123, 255, 0.35), 0 0 30px -5px rgba(221, 188, 131, 0.25);
 }

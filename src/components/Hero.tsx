@@ -9,10 +9,12 @@ export function Hero() {
       {/* Background Hero Image Layer (Z-0) - Physically Shifted Upward */}
       <div className="absolute -top-10 md:-top-20 left-0 right-0 bottom-0 pointer-events-none overflow-hidden z-0">
         <Image
-          src="/bannerHeri.webp"
+          src="/banner_hero.webp"
           alt="Notorius Hero Background"
           fill
           priority
+          quality={95}
+          sizes="100vw"
           className="object-cover object-[center_55%] opacity-75 md:opacity-90 filter brightness-105 contrast-105"
         />
         {/* Subtle Dark Gradient Mask for Left-Side Text Readability */}

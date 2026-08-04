@@ -38,7 +38,7 @@ export function PackageGrid() {
                 key={pkg.id}
                 className={`rounded-2xl flex flex-col justify-between p-6 transition-all relative ${
                   isImpulso
-                    ? 'card-featured lg:-translate-y-3 ring-1 ring-[#ddbc83]/50'
+                    ? 'card-featured lg:-translate-y-3'
                     : 'card-solid'
                 }`}
               >
