@@ -1,9 +1,10 @@
 import { store, FulfillmentItemRecord, OrderRecord } from './store';
 import { addNotoriusOrder } from './notorius-api';
-import { parseInstagramUrl } from './url-parser';
+import { sendEmergencyAlertEmail, sendSaleNotificationEmail } from './email-notifier';
 
-// Retry Delays in seconds (30s, 2m, 10m, 30m, 2h)
-const RETRY_DELAYS_SEC = [30, 120, 600, 1800, 7200];
+// Maximum retry limit & progressive delays (Attempt 1: 30s, Attempt 2: 120s / 2m, Attempt 3: 600s / 10m)
+const MAX_RETRY_ATTEMPTS = 3;
+const RETRY_DELAYS_SEC = [30, 120, 600];
 
 function calculateNextRetryTime(attemptCount: number): string {
   const index = Math.min(attemptCount - 1, RETRY_DELAYS_SEC.length - 1);
@@ -67,12 +68,23 @@ export async function processOrderFulfillment(orderId: string): Promise<OrderRec
         });
         store.updateOrder(orderId, { fulfillmentStatus: 'awaiting_review' });
         store.addEvent(orderId, 'gatekeeper_failed_no_service', 'Service ID pendente de cadastro administrativo.');
+        
+        await sendEmergencyAlertEmail({
+          orderId,
+          customerEmail: order.customerEmail,
+          postUrl: order.postUrlCanonical,
+          packageSlug: order.packageSlug,
+          metric: gatekeeperItem.metric,
+          attemptCount: gatekeeperItem.attemptCount,
+          errorMessage: 'Service ID não cadastrado.',
+        });
         return store.getOrder(orderId);
       }
 
+      const currentAttempt = gatekeeperItem.attemptCount + 1;
       store.updateFulfillmentItem(gatekeeperItem.id, {
         status: 'submitting',
-        attemptCount: gatekeeperItem.attemptCount + 1,
+        attemptCount: currentAttempt,
       });
 
       const result = await addNotoriusOrder({
@@ -100,21 +112,33 @@ export async function processOrderFulfillment(orderId: string): Promise<OrderRec
           }
         });
       } else if (result.status === 'error') {
-        if (result.errorType === 'definitive') {
-          // Format Incompatibility (e.g. invalid_post_type_for_service)
+        const isMaxRetriesReached = currentAttempt >= MAX_RETRY_ATTEMPTS;
+
+        if (result.errorType === 'definitive' || isMaxRetriesReached) {
           store.updateFulfillmentItem(gatekeeperItem.id, {
-            status: 'blocked_incompatible_content',
+            status: isMaxRetriesReached ? 'failed' : 'blocked_incompatible_content',
             lastError: result.errorMessage,
           });
           store.updateOrder(orderId, { fulfillmentStatus: 'awaiting_review' });
           store.addEvent(
             orderId,
-            'gatekeeper_incompatible',
-            'Publicação incompatível identificada. Retido para análise administrativa (Invariante: 1 Pacote = 1 URL Imutável).'
+            'gatekeeper_failed_max_retries',
+            `Falha no Gatekeeper após ${currentAttempt}/${MAX_RETRY_ATTEMPTS} tentativas: ${result.errorMessage}. Disparado e-mail de emergência para o admin.`
           );
-          return store.getOrder(orderId); // Stop fulfillment for admin review!
+
+          await sendEmergencyAlertEmail({
+            orderId,
+            customerEmail: order.customerEmail,
+            postUrl: order.postUrlCanonical,
+            packageSlug: order.packageSlug,
+            metric: gatekeeperItem.metric,
+            attemptCount: currentAttempt,
+            errorMessage: result.errorMessage,
+          });
+
+          return store.getOrder(orderId);
         } else if (result.errorType === 'transient') {
-          const nextRetry = calculateNextRetryTime(gatekeeperItem.attemptCount + 1);
+          const nextRetry = calculateNextRetryTime(currentAttempt);
           store.updateFulfillmentItem(gatekeeperItem.id, {
             status: 'retry_scheduled',
             lastError: result.errorMessage,
@@ -124,7 +148,7 @@ export async function processOrderFulfillment(orderId: string): Promise<OrderRec
           store.addEvent(
             orderId,
             'gatekeeper_transient_error',
-            `Falha temporária no Notorius: ${result.errorMessage}. Tentativa agendada.`
+            `Falha temporária no Notorius (tentativa ${currentAttempt}/${MAX_RETRY_ATTEMPTS}): ${result.errorMessage}. Próxima tentativa agendada.`
           );
           return store.getOrder(orderId);
         } else {
@@ -139,6 +163,17 @@ export async function processOrderFulfillment(orderId: string): Promise<OrderRec
             'gatekeeper_ambiguous_error',
             'Timeout ambíguo após envio. Retido para revisão manual para evitar duplicidade.'
           );
+          
+          await sendEmergencyAlertEmail({
+            orderId,
+            customerEmail: order.customerEmail,
+            postUrl: order.postUrlCanonical,
+            packageSlug: order.packageSlug,
+            metric: gatekeeperItem.metric,
+            attemptCount: currentAttempt,
+            errorMessage: `Timeout ambíguo: ${result.errorMessage}`,
+          });
+
           return store.getOrder(orderId);
         }
       }
@@ -164,9 +199,10 @@ export async function processOrderFulfillment(orderId: string): Promise<OrderRec
           continue;
         }
 
+        const currentItemAttempt = item.attemptCount + 1;
         store.updateFulfillmentItem(item.id, {
           status: 'submitting',
-          attemptCount: item.attemptCount + 1,
+          attemptCount: currentItemAttempt,
         });
 
         const res = await addNotoriusOrder({
@@ -187,8 +223,10 @@ export async function processOrderFulfillment(orderId: string): Promise<OrderRec
             `Subserviço ${item.metric} enviado com sucesso (#${res.providerOrderId}).`
           );
         } else if (res.status === 'error') {
-          if (res.errorType === 'transient') {
-            const nextRetry = calculateNextRetryTime(item.attemptCount + 1);
+          const isItemMaxRetriesReached = currentItemAttempt >= MAX_RETRY_ATTEMPTS;
+
+          if (res.errorType === 'transient' && !isItemMaxRetriesReached) {
+            const nextRetry = calculateNextRetryTime(currentItemAttempt);
             store.updateFulfillmentItem(item.id, {
               status: 'retry_scheduled',
               lastError: res.errorMessage,
@@ -197,28 +235,29 @@ export async function processOrderFulfillment(orderId: string): Promise<OrderRec
             store.addEvent(
               orderId,
               'item_retry_scheduled',
-              `Erro temporário no subserviço ${item.metric}. Agendado para ${nextRetry}.`
-            );
-          } else if (res.errorType === 'ambiguous') {
-            store.updateFulfillmentItem(item.id, {
-              status: 'submission_unknown',
-              lastError: res.errorMessage,
-            });
-            store.addEvent(
-              orderId,
-              'item_ambiguous_error',
-              `Timeout ambíguo no subserviço ${item.metric}. Retido para análise.`
+              `Erro temporário no subserviço ${item.metric} (tentativa ${currentItemAttempt}/${MAX_RETRY_ATTEMPTS}). Agendado para ${nextRetry}.`
             );
           } else {
+            // Definitive error, ambiguous error, or max retries exceeded
             store.updateFulfillmentItem(item.id, {
-              status: 'failed',
+              status: res.errorType === 'ambiguous' ? 'submission_unknown' : 'failed',
               lastError: res.errorMessage,
             });
             store.addEvent(
               orderId,
-              'item_failed',
-              `Erro definitivo no subserviço ${item.metric}: ${res.errorMessage}`
+              'item_failed_emergency',
+              `Falha no subserviço ${item.metric} após ${currentItemAttempt}/${MAX_RETRY_ATTEMPTS} tentativas: ${res.errorMessage}. Disparado alerta de emergência.`
             );
+
+            await sendEmergencyAlertEmail({
+              orderId,
+              customerEmail: order.customerEmail,
+              postUrl: order.postUrlCanonical,
+              packageSlug: order.packageSlug,
+              metric: item.metric,
+              attemptCount: currentItemAttempt,
+              errorMessage: res.errorMessage,
+            });
           }
         }
       }
@@ -311,6 +350,17 @@ export async function handleLateWebhookPayment(
       ? 'Pagamento Pix confirmado após janela de expiração (paid_after_expiration = true).'
       : 'Pagamento Pix confirmado com sucesso.'
   );
+
+  // Dispatch real-time sale notification email to admin
+  await sendSaleNotificationEmail({
+    orderId: order.id,
+    customerEmail: order.customerEmail,
+    customerPhone: order.customerPhone,
+    packageName: order.packageSnapshot.name,
+    amountCents: order.amountCents,
+    postUrl: order.postUrlCanonical,
+    paidAt: new Date().toISOString(),
+  });
 
   await processOrderFulfillment(order.id);
   return { success: true, message: 'Pagamento processado com sucesso.' };
