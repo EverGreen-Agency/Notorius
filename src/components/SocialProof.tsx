@@ -7,37 +7,37 @@ import { MessageSquare, CheckCircle, ShieldCheck } from 'lucide-react';
 export function SocialProof() {
   const whatsappProofs = [
     {
-      src: '/whatsapp/WhatsApp Image 2026-07-31 at 19.40.18.jpeg',
+      src: '/whatsapp/3.svg',
       label: 'Entrega Imediata',
       package: 'Pacote Start',
       badge: '100% Entregue',
     },
     {
-      src: '/whatsapp/WhatsApp Image 2026-07-31 at 19.40.18 (1).jpeg',
+      src: '/whatsapp/1.svg',
       label: 'Visualizações no Reel',
       package: 'Pacote Impulso',
       badge: 'Verificado',
     },
     {
-      src: '/whatsapp/WhatsApp Image 2026-07-31 at 19.40.18 (2).jpeg',
+      src: '/whatsapp/2.svg',
       label: 'Cliente Recorrente',
       package: 'Pacote Start',
       badge: 'Recompra',
     },
     {
-      src: '/whatsapp/WhatsApp Image 2026-07-31 at 19.40.19.jpeg',
+      src: '/whatsapp/6.svg',
       label: 'Atendimento Rápido',
       package: 'Pacote Pro',
       badge: 'Sem Fricção',
     },
     {
-      src: '/whatsapp/WhatsApp Image 2026-07-31 at 19.40.19 (1).jpeg',
+      src: '/whatsapp/4.svg',
       label: 'Fulfillment Aprovado',
       package: 'Fulfillment Pix',
       badge: 'Seguro',
     },
     {
-      src: '/whatsapp/WhatsApp Image 2026-07-31 at 19.40.19 (2).jpeg',
+      src: '/whatsapp/5.svg',
       label: 'Recompra Confirmada',
       package: 'Pacote Top',
       badge: 'Presença',
@@ -53,7 +53,7 @@ export function SocialProof() {
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] bg-radial from-[#1c66d1]/10 to-transparent blur-3xl pointer-events-none -z-10" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        
+
         {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto mb-12 space-y-3">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#05070d] border border-[#ddbc83]/40 text-xs text-[#ddbc83] font-mono shadow-sm">
@@ -71,7 +71,7 @@ export function SocialProof() {
 
       {/* Infinite Horizontal Carousel Ticker */}
       <div className="relative w-full overflow-hidden py-4 select-none">
-        
+
         {/* Left & Right Elegant Edge Fading Overlays */}
         <div className="absolute left-0 top-0 bottom-0 w-16 sm:w-32 bg-gradient-to-r from-[#0a1326] to-transparent z-10 pointer-events-none" />
         <div className="absolute right-0 top-0 bottom-0 w-16 sm:w-32 bg-gradient-to-l from-[#0a1326] to-transparent z-10 pointer-events-none" />
