@@ -179,3 +179,105 @@ URL: ${params.postUrl}
 
   return true;
 }
+
+export interface LowBalanceAlertParams {
+  balanceUSD: number;
+  thresholdUSD: number;
+  level: 'warning' | 'critical';
+  checkedAt: string;
+}
+
+export async function sendLowBalanceAlertEmail(params: LowBalanceAlertParams): Promise<boolean> {
+  const adminEmail = process.env.ADMIN_ALERT_EMAIL || 'admin@notorios.com.br';
+  const resendApiKey = process.env.RESEND_API_KEY;
+
+  const isCritical = params.level === 'critical' || params.balanceUSD <= 0;
+  const badgeText = isCritical ? 'CRÍTICO: SALDO ZERADO' : 'ATENÇÃO: SALDO BAIXO';
+  const badgeColor = isCritical ? '#e6626a' : '#ddbc83';
+
+  const formattedBalance = params.balanceUSD.toLocaleString('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  });
+
+  const subject = isCritical
+    ? `🚨 [ALERTA URGENTE - SALDO ZERADO] API Notorius SMM com ${formattedBalance}`
+    : `⚠️ [ALERTA DE SALDO BAIXO] API Notorius SMM com ${formattedBalance}`;
+
+  const htmlBody = `
+    <div style="font-family: Arial, sans-serif; padding: 24px; background-color: #05070d; color: #f7f4ec; border-radius: 12px; border: 1px solid ${badgeColor};">
+      <div style="display: inline-block; padding: 6px 12px; background-color: ${badgeColor}; color: #05070d; font-weight: bold; border-radius: 6px; font-size: 12px; margin-bottom: 16px;">
+        ${badgeText}
+      </div>
+
+      <h2 style="color: ${badgeColor}; margin-top: 0;">${subject}</h2>
+      <p style="font-size: 16px; color: #f4e4c1;">
+        ${
+          isCritical
+            ? 'O saldo da conta Notorius SMM foi totalmente esgotado ou está zerado. Pedidos efetuados serão retidos até a recarga.'
+            : `O saldo atual da conta Notorius SMM caiu abaixo do limite de segurança recomendado de $${params.thresholdUSD.toFixed(2)} USD.`
+        }
+      </p>
+      
+      <hr style="border-color: rgba(221, 188, 131, 0.2); margin: 20px 0;" />
+
+      <h3 style="color: #ddbc83;">Status da Conta:</h3>
+      <ul style="line-height: 1.8;">
+        <li><strong>Saldo Atual:</strong> <span style="color: ${badgeColor}; font-weight: bold; font-size: 18px;">${formattedBalance} USD</span></li>
+        <li><strong>Limite de Alerta:</strong> $${params.thresholdUSD.toFixed(2)} USD</li>
+        <li><strong>Nível de Gravidade:</strong> <code style="color: ${badgeColor};">${params.level.toUpperCase()}</code></li>
+        <li><strong>Data/Hora do Monitoramento:</strong> ${new Date(params.checkedAt).toLocaleString('pt-BR')}</li>
+      </ul>
+
+      <hr style="border-color: rgba(221, 188, 131, 0.2); margin: 20px 0;" />
+
+      <p style="font-size: 14px; color: #9bc2ff;">
+        💡 <strong>Ação Recomendada:</strong> Acesse o painel de fornecedor Notorius SMM e efetue uma nova recarga em Dólares para evitar retenções de entrega nos pedidos dos seus clientes.
+      </p>
+    </div>
+  `;
+
+  if (resendApiKey) {
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${resendApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
+          to: [adminEmail],
+          subject,
+          html: htmlBody,
+        }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error(`[LOW BALANCE EMAIL FAILED]: Resend API error (${response.status}): ${errText}`);
+        return false;
+      }
+
+      console.log(`[LOW BALANCE EMAIL SENT]: Alert sent to ${adminEmail} for balance ${formattedBalance}`);
+      return true;
+    } catch (err) {
+      console.error('[LOW BALANCE EMAIL ERROR]:', err);
+      return false;
+    }
+  }
+
+  console.log(`
+================================================================================
+⚠️ [ALERTA DE SALDO BAIXO - EMAIL SIMULADO]
+Para: ${adminEmail}
+Assunto: ${subject}
+Saldo Atual: ${formattedBalance} USD
+Limite de Aviso: $${params.thresholdUSD.toFixed(2)} USD
+Nível: ${params.level.toUpperCase()}
+================================================================================
+  `);
+
+  return true;
+}
+

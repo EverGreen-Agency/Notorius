@@ -162,3 +162,79 @@ export async function addNotoriusOrder(req: AddOrderRequest): Promise<AddOrderRe
     rawResponse: data,
   };
 }
+
+export interface GetBalanceResult {
+  success: boolean;
+  balanceUSD?: number;
+  currency?: string;
+  errorMessage?: string;
+  rawResponse?: Record<string, unknown>;
+}
+
+export async function getNotoriusBalance(): Promise<GetBalanceResult> {
+  const apiKey = process.env.NOTORIUS_API_KEY;
+
+  if (!apiKey || apiKey === 'mock_key') {
+    return {
+      success: true,
+      balanceUSD: 25.50,
+      currency: 'USD',
+      rawResponse: { balance: '25.50', currency: 'USD', is_mock: true },
+    };
+  }
+
+  const params = new URLSearchParams();
+  params.append('key', apiKey);
+  params.append('action', 'balance');
+
+  try {
+    const response = await fetch('https://notorius.pro/api/v2', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params.toString(),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      return {
+        success: false,
+        errorMessage: `HTTP ${response.status}: ${text}`,
+      };
+    }
+
+    const data = await response.json();
+
+    if (data.error) {
+      return {
+        success: false,
+        errorMessage: data.error,
+        rawResponse: data,
+      };
+    }
+
+    if (data.balance !== undefined) {
+      const parsedBalance = parseFloat(String(data.balance));
+      return {
+        success: true,
+        balanceUSD: isNaN(parsedBalance) ? 0 : parsedBalance,
+        currency: data.currency || 'USD',
+        rawResponse: data,
+      };
+    }
+
+    return {
+      success: false,
+      errorMessage: 'Campo balance ausente no retorno da API Notorius.',
+      rawResponse: data,
+    };
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    return {
+      success: false,
+      errorMessage: `Falha na conexão com a API Notorius: ${errorMsg}`,
+    };
+  }
+}
+

@@ -98,6 +98,20 @@ class ApplicationStore {
   private fulfillmentItems: Map<string, FulfillmentItemRecord> = new Map();
   private events: OrderEventRecord[] = [];
   private itemLocks: Set<string> = new Set();
+  private lastLowBalanceAlertAt: string | null = null;
+  private lastBalanceAlertLevel: 'normal' | 'warning' | 'critical' = 'normal';
+
+  public getLastBalanceAlertState() {
+    return {
+      lastAlertAt: this.lastLowBalanceAlertAt,
+      lastLevel: this.lastBalanceAlertLevel,
+    };
+  }
+
+  public updateBalanceAlertState(level: 'normal' | 'warning' | 'critical') {
+    this.lastBalanceAlertLevel = level;
+    this.lastLowBalanceAlertAt = new Date().toISOString();
+  }
 
   // Create Order
   public createOrder(order: OrderRecord): OrderRecord {

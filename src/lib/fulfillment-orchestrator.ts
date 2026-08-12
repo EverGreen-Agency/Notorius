@@ -1,12 +1,91 @@
 import { store, FulfillmentItemRecord, OrderRecord } from './store';
-import { addNotoriusOrder } from './notorius-api';
-import { sendEmergencyAlertEmail, sendSaleNotificationEmail } from './email-notifier';
+import { addNotoriusOrder, getNotoriusBalance } from './notorius-api';
+import { sendEmergencyAlertEmail, sendSaleNotificationEmail, sendLowBalanceAlertEmail } from './email-notifier';
 
 // Maximum retry limit & progressive delays (Attempt 1: 30s, Attempt 2: 120s / 2m, Attempt 3: 600s / 10m)
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_DELAYS_SEC = [30, 120, 600];
 
+const LOW_BALANCE_THRESHOLD_USD = 5.0; // Limite de alerta de saldo baixo
+const COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 horas de cooldown entre e-mails
+
+/**
+ * Checks Notorius SMM API balance and sends an administrative alert email
+ * if balance is below $5.00 USD or critical ($0.00 USD), respecting a 6h cooldown.
+ */
+export async function checkAndAlertNotoriusBalance(): Promise<{
+  checked: boolean;
+  balanceUSD?: number;
+  alertSent: boolean;
+  message: string;
+}> {
+  const result = await getNotoriusBalance();
+  if (!result.success || result.balanceUSD === undefined) {
+    return {
+      checked: false,
+      alertSent: false,
+      message: `Erro ao consultar saldo: ${result.errorMessage || 'Falha na resposta'}`,
+    };
+  }
+
+  const currentBalance = result.balanceUSD;
+  const now = Date.now();
+  const { lastAlertAt, lastLevel } = store.getLastBalanceAlertState();
+  const lastAlertTime = lastAlertAt ? new Date(lastAlertAt).getTime() : 0;
+  const isCooldownActive = now - lastAlertTime < COOLDOWN_MS;
+
+  let currentLevel: 'normal' | 'warning' | 'critical' = 'normal';
+  if (currentBalance <= 0) {
+    currentLevel = 'critical';
+  } else if (currentBalance < LOW_BALANCE_THRESHOLD_USD) {
+    currentLevel = 'warning';
+  }
+
+  if (currentLevel === 'normal') {
+    if (lastLevel !== 'normal') {
+      store.updateBalanceAlertState('normal');
+    }
+    return {
+      checked: true,
+      balanceUSD: currentBalance,
+      alertSent: false,
+      message: `Saldo regular: $${currentBalance.toFixed(2)} USD (>= $${LOW_BALANCE_THRESHOLD_USD.toFixed(2)} USD).`,
+    };
+  }
+
+  // Bypass cooldown if transitioning to critical level ($0.00 USD)
+  const shouldBypassCooldown = currentLevel === 'critical' && lastLevel !== 'critical';
+
+  if (isCooldownActive && !shouldBypassCooldown) {
+    return {
+      checked: true,
+      balanceUSD: currentBalance,
+      alertSent: false,
+      message: `Saldo baixo ($${currentBalance.toFixed(2)} USD), porém e-mail em cooldown de 6 horas (último envio: ${lastAlertAt}).`,
+    };
+  }
+
+  const sent = await sendLowBalanceAlertEmail({
+    balanceUSD: currentBalance,
+    thresholdUSD: LOW_BALANCE_THRESHOLD_USD,
+    level: currentLevel,
+    checkedAt: new Date().toISOString(),
+  });
+
+  if (sent) {
+    store.updateBalanceAlertState(currentLevel);
+  }
+
+  return {
+    checked: true,
+    balanceUSD: currentBalance,
+    alertSent: sent,
+    message: `Alerta de saldo (${currentLevel.toUpperCase()}) enviado ao admin. Saldo atual: $${currentBalance.toFixed(2)} USD.`,
+  };
+}
+
 function calculateNextRetryTime(attemptCount: number): string {
+
   const index = Math.min(attemptCount - 1, RETRY_DELAYS_SEC.length - 1);
   const baseDelaySec = RETRY_DELAYS_SEC[index];
   // Add random jitter (+- 10%)
@@ -278,6 +357,11 @@ export async function processOrderFulfillment(orderId: string): Promise<OrderRec
     } else if (statuses.some((s) => s === 'failed')) {
       store.updateOrder(orderId, { fulfillmentStatus: 'partially_failed' });
     }
+
+    // Non-blocking asynchronous balance check after fulfillment
+    checkAndAlertNotoriusBalance().catch((err) => {
+      console.error('[POST-FULFILLMENT BALANCE CHECK ERROR]:', err);
+    });
 
     return store.getOrder(orderId);
   } finally {
