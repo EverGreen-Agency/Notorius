@@ -224,9 +224,9 @@ export default function OrderPaymentPage({ params }: { params: Promise<{ token: 
                 <button
                   onClick={handleSimulatePayment}
                   disabled={isSimulatingPayment}
-                  className="px-3.5 py-1.5 rounded-xl bg-[var(--sapphire-glow)] border border-[var(--sapphire-action)] text-[var(--sapphire-soft)] text-[11px] font-mono hover:bg-[var(--sapphire-action)] hover:text-white transition-all flex items-center gap-1.5 mx-auto"
+                  className="px-4 py-2 rounded-xl bg-[var(--sapphire-glow)] border border-[var(--sapphire-action)] text-[var(--sapphire-soft)] text-xs font-mono hover:bg-[var(--sapphire-action)] hover:text-white transition-all flex items-center justify-center gap-1.5 mx-auto max-w-full text-center leading-snug"
                 >
-                  <Sparkles className="w-3.5 h-3.5" />
+                  <Sparkles className="w-3.5 h-3.5 shrink-0" />
                   <span>{isSimulatingPayment ? 'Simulando...' : 'Simular Pagamento Pix (Dev Mode)'}</span>
                 </button>
               </div>
@@ -236,7 +236,7 @@ export default function OrderPaymentPage({ params }: { params: Promise<{ token: 
 
           {/* Section A: Pix Copia e Cola OR Expired Action Card */}
           {!isPaid && isExpired && (
-            <div className="glass-panel-navy p-6 sm:p-8 rounded-3xl space-y-6 border-2 border-rose-500/40 bg-rose-500/5 text-center">
+            <div className="glass-panel-navy p-5 sm:p-8 rounded-3xl space-y-6 border-2 border-rose-500/40 bg-rose-500/5 text-center">
               <div className="space-y-2">
                 <h2 className="text-lg font-bold text-white">Deseja realizar este pedido?</h2>
                 <p className="text-xs text-[var(--slate-400)] max-w-md mx-auto leading-relaxed">
@@ -256,22 +256,22 @@ export default function OrderPaymentPage({ params }: { params: Promise<{ token: 
           )}
 
           {!isPaid && !isExpired && orderData.payment && (
-            <div className="glass-panel-navy p-6 sm:p-8 rounded-3xl space-y-6">
+            <div className="glass-panel-navy p-4 sm:p-8 rounded-3xl space-y-6">
               
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-4 border-b border-white/10 text-center sm:text-left">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pb-4 border-b border-white/10 text-center sm:text-left">
                 <div>
                   <h2 className="text-base font-bold text-white">Código Pix Copia e Cola</h2>
                   <p className="text-xs text-[var(--slate-400)]">Copie o código abaixo e utilize na opção Pix do seu aplicativo de banco.</p>
                 </div>
-                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--navy-900)] border border-[var(--gold-500)]/30 text-xs text-[var(--gold-300)] font-mono">
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--navy-900)] border border-[var(--gold-500)]/30 text-xs text-[var(--gold-300)] font-mono shrink-0">
                   <Clock className="w-3.5 h-3.5" />
                   <span>Válido por 15 minutos</span>
                 </div>
               </div>
 
               {/* Visual QR Code Image */}
-              <div className="flex flex-col items-center justify-center p-6 rounded-2xl bg-[var(--navy-950)] border border-white/10 space-y-3 text-center">
-                <div className="w-56 h-56 bg-white p-3 rounded-2xl flex items-center justify-center border-4 border-[var(--gold-500)]/40 shadow-2xl">
+              <div className="flex flex-col items-center justify-center p-4 sm:p-6 rounded-2xl bg-[var(--navy-950)] border border-white/10 space-y-3 text-center">
+                <div className="w-48 h-48 sm:w-56 sm:h-56 bg-white p-3 rounded-2xl flex items-center justify-center border-4 border-[var(--gold-500)]/40 shadow-2xl shrink-0">
                   <img
                     src={
                       orderData.payment.qrCodeBase64
@@ -291,7 +291,7 @@ export default function OrderPaymentPage({ params }: { params: Promise<{ token: 
 
               {/* Copy Box */}
               <div className="space-y-3">
-                <div className="p-4 rounded-2xl bg-[var(--navy-950)] border border-white/10 font-mono text-xs text-[var(--slate-400)] break-all max-h-24 overflow-y-auto">
+                <div className="p-3.5 sm:p-4 rounded-2xl bg-[var(--navy-950)] border border-white/10 font-mono text-xs text-[var(--slate-400)] break-all max-h-24 overflow-y-auto">
                   {orderData.payment.qrCode}
                 </div>
 
@@ -313,7 +313,15 @@ export default function OrderPaymentPage({ params }: { params: Promise<{ token: 
                 </button>
               </div>
 
-              <div className="flex items-center justify-center gap-2 text-xs text-[var(--slate-400)] pt-2">
+              {/* Mercado Pago Security Trust Badge */}
+              <div className="p-3 rounded-2xl bg-[var(--navy-950)] border border-[var(--gold-500)]/30 flex items-center justify-center gap-2 text-center shadow-inner">
+                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span className="text-xs text-[var(--slate-300)] font-medium">
+                  Pagamento 100% Seguro e Processado via <strong className="text-white font-bold">Mercado Pago</strong>
+                </span>
+              </div>
+
+              <div className="flex items-center justify-center gap-2 text-xs text-[var(--slate-400)] pt-1">
                 <RefreshCw className="w-3.5 h-3.5 animate-spin text-[var(--sapphire-soft)]" />
                 <span>Verificando pagamento automaticamente a cada 3 segundos...</span>
               </div>

@@ -444,10 +444,15 @@ function CheckoutContent() {
                   )}
                 </button>
 
-                <p className="text-[11px] text-[var(--text-muted)] text-center font-medium flex items-center justify-center gap-1.5">
-                  <Lock className="w-3.5 h-3.5 text-[var(--gold-300)] inline" />
-                  <span>A Pushin Pay atua como processadora de pagamentos Pix. Processamento automático em tempo real.</span>
-                </p>
+                <div className="p-3.5 rounded-xl bg-[var(--navy-950)] border border-[var(--sapphire-glow)]/40 text-center space-y-1.5">
+                  <div className="flex items-center justify-center gap-1.5 text-xs text-[var(--sapphire-soft)] font-bold">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    <span>Pagamento 100% Seguro via Mercado Pago</span>
+                  </div>
+                  <p className="text-[11px] text-[var(--text-muted)] leading-tight max-w-sm mx-auto">
+                    Seus dados são protegidos por criptografia SSL de 256 bits. Confirmação e liberação automática em tempo real.
+                  </p>
+                </div>
               </form>
 
             </div>

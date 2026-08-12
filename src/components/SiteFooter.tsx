@@ -15,7 +15,7 @@ export function SiteFooter() {
           <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-[var(--slate-400)]">
             <div className="flex items-center gap-1.5 text-[var(--ivory-100)]">
               <Shield className="w-4 h-4 text-[var(--gold-300)]" />
-              <span>Pagamentos processados via Pushin Pay</span>
+              <span>Pagamentos processados via Mercado Pago</span>
             </div>
 
             <a 

@@ -15,7 +15,7 @@ export function TrustStrip() {
     {
       icon: Zap,
       title: 'Pix Instantâneo',
-      desc: 'Confirmação automática em segundos via Pushin Pay com disparo imediato.',
+      desc: 'Confirmação automática em segundos via Mercado Pago com disparo imediato.',
     },
     {
       icon: Headphones,
