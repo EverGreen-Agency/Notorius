@@ -343,10 +343,180 @@ class ApplicationStore {
     return ev;
   }
 
-  public getEventsByOrderId(orderId: string): OrderEventRecord[] {
-    return this.events
-      .filter((e) => e.orderId === orderId)
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  public async getOrderAsync(id: string): Promise<OrderRecord | undefined> {
+    const mem = this.orders.get(id);
+    if (mem) return mem;
+
+    if (supabase) {
+      const { data, error } = await supabase.from('orders').select('*').eq('id', id).maybeSingle();
+      if (!error && data) {
+        const orderRecord: OrderRecord = {
+          id: data.id,
+          publicToken: data.public_token,
+          customerName: data.customer_name,
+          customerEmail: data.customer_email,
+          customerPhone: data.customer_phone,
+          packageSlug: data.package_slug,
+          packageSnapshot: data.package_snapshot,
+          postUrlOriginal: data.post_url_original,
+          postUrlCanonical: data.post_url_canonical,
+          contentType: data.content_type,
+          amountCents: data.amount_cents,
+          currency: data.currency,
+          paymentStatus: data.payment_status,
+          fulfillmentStatus: data.fulfillment_status,
+          createdAt: data.created_at,
+          updatedAt: data.updated_at,
+        };
+        this.orders.set(orderRecord.id, orderRecord);
+        return orderRecord;
+      }
+    }
+    return undefined;
+  }
+
+  public async getOrderByPublicTokenAsync(token: string): Promise<OrderRecord | undefined> {
+    const memoryOrder = Array.from(this.orders.values()).find((o) => o.publicToken === token);
+    if (memoryOrder) return memoryOrder;
+
+    if (supabase) {
+      const { data, error } = await supabase.from('orders').select('*').eq('public_token', token).maybeSingle();
+      if (!error && data) {
+        const orderRecord: OrderRecord = {
+          id: data.id,
+          publicToken: data.public_token,
+          customerName: data.customer_name,
+          customerEmail: data.customer_email,
+          customerPhone: data.customer_phone,
+          packageSlug: data.package_slug,
+          packageSnapshot: data.package_snapshot,
+          postUrlOriginal: data.post_url_original,
+          postUrlCanonical: data.post_url_canonical,
+          contentType: data.content_type,
+          amountCents: data.amount_cents,
+          currency: data.currency,
+          paymentStatus: data.payment_status,
+          fulfillmentStatus: data.fulfillment_status,
+          createdAt: data.created_at,
+          updatedAt: data.updated_at,
+        };
+        this.orders.set(orderRecord.id, orderRecord);
+        return orderRecord;
+      }
+    }
+    return undefined;
+  }
+
+  public async getPaymentsByOrderIdAsync(orderId: string): Promise<PaymentRecord[]> {
+    const memoryPayments = Array.from(this.payments.values()).filter((p) => p.orderId === orderId);
+    if (memoryPayments.length > 0) return memoryPayments;
+
+    if (supabase) {
+      const { data, error } = await supabase.from('payments').select('*').eq('order_id', orderId);
+      if (!error && data && data.length > 0) {
+        const records: PaymentRecord[] = data.map((p) => ({
+          id: p.id,
+          orderId: p.order_id,
+          provider: p.provider,
+          providerPaymentId: p.provider_payment_id,
+          amountCents: p.amount_cents,
+          qrCode: p.qr_code,
+          qrCodeBase64: p.qr_code_base64,
+          status: p.status,
+          expiresAt: p.expires_at,
+          paidAfterExpiration: p.paid_after_expiration,
+          paidAt: p.paid_at,
+          createdAt: p.created_at,
+        }));
+        records.forEach((r) => this.payments.set(r.id, r));
+        return records;
+      }
+    }
+    return memoryPayments;
+  }
+
+  public async getPaymentByProviderIdAsync(providerPaymentId: string): Promise<PaymentRecord | undefined> {
+    const mem = Array.from(this.payments.values()).find((p) => p.providerPaymentId === providerPaymentId);
+    if (mem) return mem;
+
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('provider_payment_id', providerPaymentId)
+        .maybeSingle();
+
+      if (!error && data) {
+        const record: PaymentRecord = {
+          id: data.id,
+          orderId: data.order_id,
+          provider: data.provider,
+          providerPaymentId: data.provider_payment_id,
+          amountCents: data.amount_cents,
+          qrCode: data.qr_code,
+          qrCodeBase64: data.qr_code_base64,
+          status: data.status,
+          expiresAt: data.expires_at,
+          paidAfterExpiration: data.paid_after_expiration,
+          paidAt: data.paid_at,
+          createdAt: data.created_at,
+        };
+        this.payments.set(record.id, record);
+        return record;
+      }
+    }
+    return undefined;
+  }
+
+  public async getFulfillmentItemsByOrderIdAsync(orderId: string): Promise<FulfillmentItemRecord[]> {
+    const mem = Array.from(this.fulfillmentItems.values()).filter((i) => i.orderId === orderId);
+    if (mem.length > 0) return mem;
+
+    if (supabase) {
+      const { data, error } = await supabase.from('fulfillment_items').select('*').eq('order_id', orderId);
+      if (!error && data && data.length > 0) {
+        const records: FulfillmentItemRecord[] = data.map((i) => ({
+          id: i.id,
+          orderId: i.order_id,
+          metric: i.metric,
+          serviceId: i.service_id,
+          quantity: i.quantity,
+          isGatekeeper: i.is_gatekeeper,
+          providerOrderId: i.provider_order_id,
+          status: i.status,
+          attemptCount: i.attempt_count,
+          lastError: i.last_error,
+          nextRetryAt: i.next_retry_at,
+          submittedAt: i.submitted_at,
+          completedAt: i.completed_at,
+          createdAt: i.created_at,
+        }));
+        records.forEach((r) => this.fulfillmentItems.set(r.id, r));
+        return records;
+      }
+    }
+    return mem;
+  }
+
+  public async getEventsByOrderIdAsync(orderId: string): Promise<OrderEventRecord[]> {
+    const mem = this.events.filter((e) => e.orderId === orderId);
+    if (mem.length > 0) return mem;
+
+    if (supabase) {
+      const { data, error } = await supabase.from('order_events').select('*').eq('order_id', orderId);
+      if (!error && data && data.length > 0) {
+        const records: OrderEventRecord[] = data.map((e) => ({
+          id: e.id,
+          orderId: e.order_id,
+          type: e.type,
+          message: e.message,
+          metadata: e.metadata,
+          createdAt: e.created_at,
+        }));
+        return records.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      }
+    }
+    return mem;
   }
 }
 

@@ -269,6 +269,26 @@ export default function OrderPaymentPage({ params }: { params: Promise<{ token: 
                 </div>
               </div>
 
+              {/* Visual QR Code Image */}
+              <div className="flex flex-col items-center justify-center p-6 rounded-2xl bg-[var(--navy-950)] border border-white/10 space-y-3 text-center">
+                <div className="w-56 h-56 bg-white p-3 rounded-2xl flex items-center justify-center border-4 border-[var(--gold-500)]/40 shadow-2xl">
+                  <img
+                    src={
+                      orderData.payment.qrCodeBase64
+                        ? (orderData.payment.qrCodeBase64.startsWith('data:')
+                            ? orderData.payment.qrCodeBase64
+                            : `data:image/png;base64,${orderData.payment.qrCodeBase64}`)
+                        : `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(orderData.payment.qrCode)}`
+                    }
+                    alt="QR Code Pix Mercado Pago"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+                <p className="text-xs text-[var(--slate-400)] font-medium">
+                  Escaneie o QR Code com o aplicativo do seu banco ou copie a chave abaixo:
+                </p>
+              </div>
+
               {/* Copy Box */}
               <div className="space-y-3">
                 <div className="p-4 rounded-2xl bg-[var(--navy-950)] border border-white/10 font-mono text-xs text-[var(--slate-400)] break-all max-h-24 overflow-y-auto">

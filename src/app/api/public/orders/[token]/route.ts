@@ -7,16 +7,16 @@ export async function GET(
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token } = await params;
-  const order = store.getOrderByPublicToken(token);
+  const order = await store.getOrderByPublicTokenAsync(token);
 
   if (!order) {
     return NextResponse.json({ error: 'Pedido não encontrado.' }, { status: 404 });
   }
 
-  const payments = store.getPaymentsByOrderId(order.id);
+  const payments = await store.getPaymentsByOrderIdAsync(order.id);
   const currentPayment = payments[payments.length - 1];
-  const items = store.getFulfillmentItemsByOrderId(order.id);
-  const events = store.getEventsByOrderId(order.id);
+  const items = await store.getFulfillmentItemsByOrderIdAsync(order.id);
+  const events = await store.getEventsByOrderIdAsync(order.id);
 
   // Return strictly sanitized data (no API keys, provider internal IDs, or raw cost rates)
   return NextResponse.json({
