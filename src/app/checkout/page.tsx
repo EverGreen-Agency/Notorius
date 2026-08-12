@@ -373,7 +373,7 @@ function CheckoutContent() {
                         <div
                           key={bump.id}
                           onClick={() => toggleBump(bump.id)}
-                          className={`p-4 rounded-2xl border cursor-pointer transition-all ${
+                          className={`p-3.5 sm:p-4 rounded-2xl border cursor-pointer transition-all ${
                             isChecked
                               ? 'bg-[var(--gold-500)]/10 border-[var(--gold-500)] text-white shadow-md'
                               : 'bg-[var(--navy-950)] border-[var(--border-subtle)] hover:border-[var(--gold-500)]/40 text-[var(--text-secondary)]'
@@ -384,19 +384,21 @@ function CheckoutContent() {
                               type="checkbox"
                               checked={isChecked}
                               onChange={() => {}} // Handled by container onClick
-                              className="mt-1 w-4 h-4 rounded border-[var(--border-subtle)] text-[var(--gold-300)] focus:ring-0 cursor-pointer accent-[var(--gold-300)]"
+                              className="mt-1 w-4 h-4 rounded border-[var(--border-subtle)] text-[var(--gold-300)] focus:ring-0 cursor-pointer accent-[var(--gold-300)] shrink-0"
                             />
-                            <div className="flex-1 space-y-1">
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs sm:text-sm font-extrabold text-white flex items-center gap-2">
-                                  <span>{bump.name}</span>
+                            <div className="flex-1 space-y-1.5 min-w-0">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-xs sm:text-sm font-extrabold text-white leading-tight">
+                                    {bump.name}
+                                  </span>
                                   {bump.badge && (
-                                    <span className="px-2 py-0.5 rounded-md bg-[var(--gold-300)] text-[var(--navy-950)] text-[10px] font-black uppercase font-mono">
+                                    <span className="px-2 py-0.5 rounded-md bg-[var(--gold-300)] text-[var(--navy-950)] text-[10px] font-black uppercase font-mono shrink-0">
                                       {bump.badge}
                                     </span>
                                   )}
-                                </span>
-                                <span className="text-xs font-mono font-black text-[var(--gold-300)] bg-[var(--navy-950)] px-2 py-0.5 rounded-lg border border-[var(--gold-500)]/30">
+                                </div>
+                                <span className="self-start sm:self-auto text-xs font-mono font-black text-[var(--gold-300)] bg-[var(--navy-950)] px-2.5 py-1 rounded-lg border border-[var(--gold-500)]/30 shrink-0">
                                   + R$ {(bump.priceCents / 100).toFixed(2).replace('.', ',')}
                                 </span>
                               </div>

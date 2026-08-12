@@ -55,7 +55,6 @@ export default function OrderPaymentPage({ params }: { params: Promise<{ token: 
   const [newReelUrl, setNewReelUrl] = useState('');
   const [isUpdatingUrl, setIsUpdatingUrl] = useState(false);
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
-  const [isSimulatingPayment, setIsSimulatingPayment] = useState(false);
 
   // Poll for status update every 3 seconds
   useEffect(() => {
@@ -117,17 +116,6 @@ export default function OrderPaymentPage({ params }: { params: Promise<{ token: 
       setUpdateMessage(msg);
     } finally {
       setIsUpdatingUrl(false);
-    }
-  };
-
-  const handleSimulatePayment = async () => {
-    setIsSimulatingPayment(true);
-    try {
-      await fetch(`/api/public/orders/${token}`, { method: 'POST' });
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsSimulatingPayment(false);
     }
   };
 
@@ -215,20 +203,6 @@ export default function OrderPaymentPage({ params }: { params: Promise<{ token: 
                 <p className="text-xs text-[var(--slate-400)] max-w-md mx-auto">
                   Pague através do seu app bancário para liberar a entrega do pacote <strong className="text-white">{orderData.packageName}</strong> (R$ {(orderData.amountCents / 100).toFixed(2).replace('.', ',')}).
                 </p>
-              </div>
-            )}
-
-            {/* Dev Mode Payment Simulation Trigger */}
-            {!isPaid && !isExpired && (
-              <div className="pt-2">
-                <button
-                  onClick={handleSimulatePayment}
-                  disabled={isSimulatingPayment}
-                  className="px-4 py-2 rounded-xl bg-[var(--sapphire-glow)] border border-[var(--sapphire-action)] text-[var(--sapphire-soft)] text-xs font-mono hover:bg-[var(--sapphire-action)] hover:text-white transition-all flex items-center justify-center gap-1.5 mx-auto max-w-full text-center leading-snug"
-                >
-                  <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                  <span>{isSimulatingPayment ? 'Simulando...' : 'Simular Pagamento Pix (Dev Mode)'}</span>
-                </button>
               </div>
             )}
 

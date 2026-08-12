@@ -70,6 +70,12 @@ export function Hero() {
               <span>Escolher Meu Pacote</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform text-[#f4e4c1]" />
             </a>
+
+            {/* Mercado Pago Security Trust Badge */}
+            <div className="inline-flex items-center justify-center sm:justify-start gap-2 px-3.5 py-2.5 rounded-xl bg-[#0a1326]/90 border border-[#ddbc83]/30 text-xs font-semibold text-[#9bc2ff] shadow-md backdrop-blur-md">
+              <Shield className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>Checkout 100% Seguro via <strong className="text-white">Mercado Pago</strong></span>
+            </div>
           </div>
 
           {/* Proof Badges Strip (Desktop Only - Transferred to TrustStrip on Mobile) */}

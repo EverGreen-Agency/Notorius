@@ -81,6 +81,12 @@ export function PackageGrid() {
               Cada pacote é aplicado a <strong className="text-[#f7f4ec] underline decoration-[#ddbc83]/50 decoration-2 underline-offset-4">uma única publicação pública</strong> do Instagram (Reel ou Post). Pagamento único via Pix.
             </p>
 
+            {/* Mercado Pago Trust Seal */}
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[#05070d]/80 border border-[#49b887]/40 text-xs font-semibold text-[#49b887] shadow-sm">
+              <Shield className="w-4 h-4 text-[#49b887]" />
+              <span>Garantia de Checkout Seguro via <strong className="text-white">Mercado Pago</strong></span>
+            </div>
+
             {/* Mobile Progress Dots */}
             <div className="flex md:hidden items-center justify-center gap-1.5 pt-1.5 pb-1">
               {INITIAL_PACKAGES.map((_, i) => (
