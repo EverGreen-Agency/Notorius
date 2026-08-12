@@ -53,7 +53,7 @@ export interface OrderRecord {
 export interface PaymentRecord {
   id: string;
   orderId: string;
-  provider: 'pushinpay';
+  provider: 'pushinpay' | 'mercadopago';
   providerPaymentId: string;
   amountCents: number;
   qrCode: string;

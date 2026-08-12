@@ -154,6 +154,7 @@ export default function OrderPaymentPage({ params }: { params: Promise<{ token: 
   }
 
   const isPaid = orderData.paymentStatus === 'paid';
+  const isExpired = orderData.paymentStatus === 'expired' || orderData.paymentStatus === 'failed';
   const isAwaitingUrl = orderData.fulfillmentStatus === 'awaiting_customer_action';
 
   return (
@@ -195,6 +196,16 @@ export default function OrderPaymentPage({ params }: { params: Promise<{ token: 
                   </span>
                 )}
               </div>
+            ) : isExpired ? (
+              <div className="space-y-3">
+                <div className="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center mx-auto">
+                  <AlertCircle className="w-7 h-7" />
+                </div>
+                <h1 className="text-2xl font-black text-rose-300">Cobrança Pix Expirada</h1>
+                <p className="text-xs text-[var(--slate-400)] max-w-md mx-auto">
+                  O tempo limite de 15 minutos para pagamento do pacote <strong className="text-white">{orderData.packageName}</strong> expirou.
+                </p>
+              </div>
             ) : (
               <div className="space-y-3">
                 <div className="w-14 h-14 rounded-2xl bg-[var(--navy-900)] border border-[var(--gold-500)]/40 text-[var(--gold-300)] flex items-center justify-center mx-auto">
@@ -208,7 +219,7 @@ export default function OrderPaymentPage({ params }: { params: Promise<{ token: 
             )}
 
             {/* Dev Mode Payment Simulation Trigger */}
-            {!isPaid && (
+            {!isPaid && !isExpired && (
               <div className="pt-2">
                 <button
                   onClick={handleSimulatePayment}
@@ -223,8 +234,28 @@ export default function OrderPaymentPage({ params }: { params: Promise<{ token: 
 
           </div>
 
-          {/* Section A: Pix Copia e Cola */}
-          {!isPaid && orderData.payment && (
+          {/* Section A: Pix Copia e Cola OR Expired Action Card */}
+          {!isPaid && isExpired && (
+            <div className="glass-panel-navy p-6 sm:p-8 rounded-3xl space-y-6 border-2 border-rose-500/40 bg-rose-500/5 text-center">
+              <div className="space-y-2">
+                <h2 className="text-lg font-bold text-white">Deseja realizar este pedido?</h2>
+                <p className="text-xs text-[var(--slate-400)] max-w-md mx-auto leading-relaxed">
+                  Esta cobrança Pix não é mais válida. Para dar continuidade, inicie um novo pedido no checkout.
+                </p>
+              </div>
+              <div className="pt-2">
+                <Link
+                  href="/"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl bg-[var(--sapphire-action)] text-white font-extrabold text-sm hover:bg-[var(--sapphire-600)] transition-all shadow-lg shadow-[var(--sapphire-glow)]"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span>Fazer um Novo Pedido</span>
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {!isPaid && !isExpired && orderData.payment && (
             <div className="glass-panel-navy p-6 sm:p-8 rounded-3xl space-y-6">
               
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-4 border-b border-white/10 text-center sm:text-left">
@@ -234,7 +265,7 @@ export default function OrderPaymentPage({ params }: { params: Promise<{ token: 
                 </div>
                 <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--navy-900)] border border-[var(--gold-500)]/30 text-xs text-[var(--gold-300)] font-mono">
                   <Clock className="w-3.5 h-3.5" />
-                  <span>Válido por 30 minutos</span>
+                  <span>Válido por 15 minutos</span>
                 </div>
               </div>
 
