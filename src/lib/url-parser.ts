@@ -51,8 +51,8 @@ export function parseInstagramUrl(inputUrl: string): ParsedInstagramUrl {
   }
 
   const pathname = parsed.pathname;
-  // Match /reel/{shortcode} or /p/{shortcode}
-  const match = pathname.match(/^\/(p|reel)\/([A-Za-z0-9_-]+)\/?/);
+  // Match /reel/{shortcode}, /p/{shortcode} or /post/{shortcode}
+  const match = pathname.match(/^\/(p|reel|post)\/([A-Za-z0-9_-]+)\/?/);
 
   if (!match) {
     if (pathname.includes('/stories/')) {
@@ -72,7 +72,8 @@ export function parseInstagramUrl(inputUrl: string): ParsedInstagramUrl {
 
   const [, rawType, shortcode] = match;
   const contentType = rawType === 'reel' ? 'reel' : 'post';
-  const canonicalUrl = `https://www.instagram.com/${contentType}/${shortcode}/`;
+  const pathPrefix = rawType === 'reel' ? 'reel' : 'p';
+  const canonicalUrl = `https://www.instagram.com/${pathPrefix}/${shortcode}/`;
 
   return {
     isValid: true,

@@ -33,11 +33,13 @@ export interface MercadoPagoWebhookPayload {
  * Creates a Pix payment charge on Mercado Pago with 15-minute expiration time and Idempotency key.
  */
 export async function createMercadoPagoPix(req: CreatePixRequest): Promise<CreatePixResponse> {
-  const token = process.env.MERCADOPAGO_ACCESS_TOKEN;
-  const expiresAtIso = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 minutes
+  const rawToken = process.env.MERCADOPAGO_ACCESS_TOKEN || '';
+  const token = rawToken.trim().replace(/^["']|["']$/g, '');
+  const expiresAtIso = new Date(Date.now() + 30 * 60 * 1000).toISOString(); // 30 minutes standard expiration
 
-  // Fallback to dev mode simulation if Access Token is omitted or set to mock_token
-  if (!token || token === 'mock_token') {
+  // Fallback to dev mode simulation if Access Token is omitted, mock, or contains placeholder xxxxxxxx
+  if (!token || token === 'mock_token' || token.includes('xxxxxxxx')) {
+    console.warn('[MERCADOPAGO] Token de acesso não configurado ou utilizando credencial de exemplo. Ativando resposta simulada (Dev Mode).');
     const mockId = `mp_pix_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const mockCopiaECola = `00020126580014br.gov.bcb.pix0136${mockId}520400005303986540419.905802BR5908Notorius6009SAO PAULO62070503***6304MP12`;
 
@@ -57,7 +59,7 @@ export async function createMercadoPagoPix(req: CreatePixRequest): Promise<Creat
 
   // Separate Customer Full Name into First and Last Name
   const nameParts = (req.customer.name || 'Cliente Notorius').trim().split(' ');
-  const firstName = nameParts[0];
+  const firstName = nameParts[0] || 'Cliente';
   const lastName = nameParts.slice(1).join(' ') || 'Notorius';
 
   const idempotencyKey = `pix_mp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -86,7 +88,8 @@ export async function createMercadoPagoPix(req: CreatePixRequest): Promise<Creat
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Mercado Pago API error (${response.status}): ${errorText}`);
+    console.error(`[MERCADOPAGO API ERROR] Status ${response.status}:`, errorText);
+    throw new Error(`Erro na API do Mercado Pago (${response.status}): ${errorText}`);
   }
 
   const data = await response.json();
