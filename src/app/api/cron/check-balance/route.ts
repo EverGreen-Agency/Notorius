@@ -1,15 +1,13 @@
 import { NextResponse } from 'next/server';
 import { checkAndAlertNotoriusBalance } from '@/lib/fulfillment-orchestrator';
+import { authorizeCronRequest } from '@/lib/internal-auth';
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const authHeader = request.headers.get('x-admin-key') || searchParams.get('key');
-  const adminSecret = process.env.ADMIN_SECRET_KEY || 'notorius_admin_2026';
-
-  if (authHeader !== adminSecret) {
+  const auth = authorizeCronRequest(request);
+  if (!auth.authorized) {
     return NextResponse.json(
-      { error: 'Acesso negado. Chave de autorização inválida ou ausente.' },
-      { status: 401 }
+      { error: auth.message },
+      { status: auth.status }
     );
   }
 

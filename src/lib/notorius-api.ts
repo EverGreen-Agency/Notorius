@@ -41,7 +41,13 @@ export function classifyNotoriusError(statusCode: number, errorMessage: string):
   const msg = errorMessage.toLowerCase();
 
   // Ambiguous timeouts or network disconnects
-  if (msg.includes('socket timeout') || msg.includes('econnaborted') || msg.includes('etimedout')) {
+  if (
+    msg.includes('socket timeout') ||
+    msg.includes('econnaborted') ||
+    msg.includes('etimedout') ||
+    msg.includes('timeout') ||
+    msg.includes('aborted')
+  ) {
     return 'ambiguous';
   }
 
@@ -77,11 +83,44 @@ export function classifyNotoriusError(statusCode: number, errorMessage: string):
   return statusCode >= 500 ? 'transient' : 'definitive';
 }
 
-export async function addNotoriusOrder(req: AddOrderRequest): Promise<AddOrderResponse> {
-  const apiKey = process.env.NOTORIUS_API_KEY;
+function getNotoriusConfig(): { apiKey: string; apiUrl: string; isMock: boolean } {
+  const apiKey = (process.env.NOTORIUS_API_KEY || '').trim();
+  const apiUrl = (process.env.NOTORIUS_API_URL || 'https://notorius.pro/api/v2')
+    .trim()
+    .replace(/\/$/, '');
+  const isMock = !apiKey || apiKey === 'mock_key';
 
-  // Mock implementation if API key is not configured in dev
-  if (!apiKey || apiKey === 'mock_key') {
+  if (process.env.NODE_ENV === 'production') {
+    if (isMock) {
+      throw new Error('NOTORIUS_API_KEY não configurada; resposta simulada bloqueada em produção.');
+    }
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(apiUrl);
+    } catch {
+      throw new Error('NOTORIUS_API_URL possui formato inválido.');
+    }
+    if (parsedUrl.protocol !== 'https:' || !parsedUrl.pathname.endsWith('/api/v2')) {
+      throw new Error('NOTORIUS_API_URL deve ser uma URL HTTPS terminada em /api/v2.');
+    }
+  }
+
+  return { apiKey, apiUrl, isMock };
+}
+
+export async function addNotoriusOrder(req: AddOrderRequest): Promise<AddOrderResponse> {
+  let config: ReturnType<typeof getNotoriusConfig>;
+  try {
+    config = getNotoriusConfig();
+  } catch (error) {
+    return {
+      status: 'error',
+      errorType: 'definitive',
+      errorMessage: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  if (config.isMock) {
     // Simulate rare error for testing: if serviceId is 999, simulate transient error
     if (req.serviceId === 999) {
       return {
@@ -100,7 +139,7 @@ export async function addNotoriusOrder(req: AddOrderRequest): Promise<AddOrderRe
   }
 
   const params = new URLSearchParams();
-  params.append('key', apiKey);
+  params.append('key', config.apiKey);
   params.append('action', 'add');
   params.append('service', req.serviceId.toString());
   params.append('link', req.link);
@@ -108,12 +147,13 @@ export async function addNotoriusOrder(req: AddOrderRequest): Promise<AddOrderRe
 
   let response: Response;
   try {
-    response = await fetch('https://notorius.pro/api/v2', {
+    response = await fetch(config.apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: params.toString(),
+      signal: AbortSignal.timeout(15_000),
     });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
@@ -135,14 +175,24 @@ export async function addNotoriusOrder(req: AddOrderRequest): Promise<AddOrderRe
     };
   }
 
-  const data = await response.json();
+  let data: Record<string, unknown>;
+  try {
+    data = (await response.json()) as Record<string, unknown>;
+  } catch {
+    return {
+      status: 'error',
+      errorType: 'ambiguous',
+      errorMessage: 'A API Notorious respondeu sem JSON válido após receber o pedido.',
+    };
+  }
 
   if (data.error) {
-    const classified = classifyNotoriusError(response.status, data.error);
+    const errorMessage = String(data.error);
+    const classified = classifyNotoriusError(response.status, errorMessage);
     return {
       status: 'error',
       errorType: classified,
-      errorMessage: data.error,
+      errorMessage,
       rawResponse: data,
     };
   }
@@ -172,9 +222,17 @@ export interface GetBalanceResult {
 }
 
 export async function getNotoriusBalance(): Promise<GetBalanceResult> {
-  const apiKey = process.env.NOTORIUS_API_KEY;
+  let config: ReturnType<typeof getNotoriusConfig>;
+  try {
+    config = getNotoriusConfig();
+  } catch (error) {
+    return {
+      success: false,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    };
+  }
 
-  if (!apiKey || apiKey === 'mock_key') {
+  if (config.isMock) {
     return {
       success: true,
       balanceUSD: 25.50,
@@ -184,16 +242,17 @@ export async function getNotoriusBalance(): Promise<GetBalanceResult> {
   }
 
   const params = new URLSearchParams();
-  params.append('key', apiKey);
+  params.append('key', config.apiKey);
   params.append('action', 'balance');
 
   try {
-    const response = await fetch('https://notorius.pro/api/v2', {
+    const response = await fetch(config.apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: params.toString(),
+      signal: AbortSignal.timeout(15_000),
     });
 
     if (!response.ok) {

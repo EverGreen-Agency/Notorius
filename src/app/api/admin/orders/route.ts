@@ -1,28 +1,24 @@
 import { NextResponse } from 'next/server';
 import { store } from '@/lib/store';
+import { authorizeAdminRequest } from '@/lib/internal-auth';
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const authHeader = request.headers.get('x-admin-key') || searchParams.get('key');
-  const adminSecret = process.env.ADMIN_SECRET_KEY || 'notorius_admin_2026';
-
-  if (authHeader !== adminSecret) {
+  const auth = authorizeAdminRequest(request);
+  if (!auth.authorized) {
     return NextResponse.json(
-      { error: 'Acesso negado. Chave administrativa inválida ou ausente.' },
-      { status: 401 }
+      { error: auth.message },
+      { status: auth.status }
     );
   }
 
-  const orders = store.listOrders();
-  const detailedOrders = orders.map((order) => {
-    const payments = store.getPaymentsByOrderId(order.id);
-    const items = store.getFulfillmentItemsByOrderId(order.id);
-    return {
+  const orders = await store.listOrdersAsync();
+  const detailedOrders = await Promise.all(
+    orders.map(async (order) => ({
       order,
-      payments,
-      items,
-    };
-  });
+      payments: await store.getPaymentsByOrderIdAsync(order.id),
+      items: await store.getFulfillmentItemsByOrderIdAsync(order.id),
+    }))
+  );
 
   return NextResponse.json({ orders: detailedOrders });
 }

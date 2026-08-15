@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { getPackageBySlug, getOrderBumpById } from '@/lib/packages-catalog';
 import { parseInstagramUrl } from '@/lib/url-parser';
 import { store, OrderRecord, PaymentRecord } from '@/lib/store';
-import { createPushinPayPix } from '@/lib/pushinpay';
 import { createMercadoPagoPix } from '@/lib/mercadopago';
 
 const checkoutSchema = z.object({
@@ -69,28 +68,43 @@ export async function POST(request: Request) {
       updatedAt: new Date().toISOString(),
     };
 
-    store.createOrder(orderRecord);
-    store.addEvent(
+    await store.createOrder(orderRecord);
+    await store.addEvent(
       orderId,
       'order_created',
       `Pedido gerado para ${pkg.name} com ${selectedBumpsInfo.length} order bump(s). Total: R$ ${(totalAmountCents / 100).toFixed(2)}.`
     );
 
     // Host URL for webhook callback (prioritizes production environment variable NEXT_PUBLIC_SITE_URL)
-    const origin = process.env.NEXT_PUBLIC_SITE_URL || request.headers.get('origin') || 'http://localhost:3000';
-    const webhookUrl = `${origin}/api/webhooks/mercadopago`;
+    const origin =
+      process.env.NEXT_PUBLIC_SITE_URL || request.headers.get('origin') || 'http://localhost:3000';
+    const webhookEndpoint = new URL('/api/webhooks/mercadopago', origin);
+    webhookEndpoint.searchParams.set('source_news', 'webhooks');
+    const webhookUrl = webhookEndpoint.toString();
 
     // Generate Pix via Mercado Pago for total amount (15 min expiration)
-    const pixResponse = await createMercadoPagoPix({
-      valueCents: totalAmountCents,
-      webhookUrl,
-      description: `Notorius - ${pkg.name}`,
-      customer: {
-        name: parsedData.customer.name,
-        email: parsedData.customer.email,
-        phone: parsedData.customer.phone,
-      },
-    });
+    let pixResponse: Awaited<ReturnType<typeof createMercadoPagoPix>>;
+    try {
+      pixResponse = await createMercadoPagoPix({
+        orderId,
+        valueCents: totalAmountCents,
+        webhookUrl,
+        description: `Notorius - ${pkg.name}`,
+        customer: {
+          name: parsedData.customer.name,
+          email: parsedData.customer.email,
+          phone: parsedData.customer.phone,
+        },
+      });
+    } catch (paymentError) {
+      await store.updateOrder(orderId, { paymentStatus: 'failed' });
+      await store.addEvent(
+        orderId,
+        'payment_creation_failed',
+        paymentError instanceof Error ? paymentError.message : String(paymentError)
+      );
+      throw paymentError;
+    }
 
     const paymentRecord: PaymentRecord = {
       id: `pay_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -105,8 +119,12 @@ export async function POST(request: Request) {
       createdAt: new Date().toISOString(),
     };
 
-    store.createPayment(paymentRecord);
-    store.addEvent(orderId, 'pix_generated', `Cobrança Pix de R$ ${(totalAmountCents / 100).toFixed(2)} gerada no Mercado Pago (#${pixResponse.id}).`);
+    await store.createPayment(paymentRecord);
+    await store.addEvent(
+      orderId,
+      'pix_generated',
+      `Cobrança Pix de R$ ${(totalAmountCents / 100).toFixed(2)} gerada no Mercado Pago (#${pixResponse.id}).`
+    );
 
     return NextResponse.json({
       success: true,

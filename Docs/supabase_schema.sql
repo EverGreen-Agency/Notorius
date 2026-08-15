@@ -70,8 +70,13 @@ CREATE TABLE IF NOT EXISTS public.order_events (
 -- Habilitar Índices de Alta Performance para Consultas Rápidas
 CREATE INDEX IF NOT EXISTS idx_orders_public_token ON public.orders(public_token);
 CREATE INDEX IF NOT EXISTS idx_payments_provider_payment_id ON public.payments(provider_payment_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_payments_provider_payment
+  ON public.payments(provider, provider_payment_id);
 CREATE INDEX IF NOT EXISTS idx_payments_order_id ON public.payments(order_id);
 CREATE INDEX IF NOT EXISTS idx_fulfillment_items_order_id ON public.fulfillment_items(order_id);
+CREATE INDEX IF NOT EXISTS idx_fulfillment_items_due_retry
+  ON public.fulfillment_items(next_retry_at)
+  WHERE status = 'retry_scheduled';
 CREATE INDEX IF NOT EXISTS idx_order_events_order_id ON public.order_events(order_id);
 
 -- ================================================================

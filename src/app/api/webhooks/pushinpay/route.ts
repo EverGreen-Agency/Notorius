@@ -16,8 +16,13 @@ export async function POST(request: Request) {
     const verifiedData = await getPushinPayPixStatus(validatedPayload.id);
 
     if (verifiedData.status === 'paid' || verifiedData.status === 'approved') {
-      const result = await handleLateWebhookPayment(verifiedData.id, verifiedData.valueCents);
-      return NextResponse.json({ success: result.success, message: result.message });
+      const result = await handleLateWebhookPayment(
+        'pushinpay',
+        verifiedData.id,
+        verifiedData.valueCents,
+        verifiedData.paidAt
+      );
+      return NextResponse.json(result, { status: result.retryable ? 503 : 200 });
     }
 
     return NextResponse.json({ success: true, message: 'Evento de webhook verificado.' });

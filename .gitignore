@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local production database exports (PII and payment payloads)
+/Docs/Banco de Dados/

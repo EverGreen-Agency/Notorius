@@ -56,7 +56,7 @@ export async function PATCH(
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token } = await params;
-  const order = store.getOrderByPublicToken(token);
+  const order = await store.getOrderByPublicTokenAsync(token);
 
   if (!order) {
     return NextResponse.json({ error: 'Pedido não encontrado.' }, { status: 404 });
@@ -87,20 +87,28 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ token: string }> }
 ) {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Rota não encontrada.' }, { status: 404 });
+  }
+
   const { token } = await params;
-  const order = store.getOrderByPublicToken(token);
+  const order = await store.getOrderByPublicTokenAsync(token);
 
   if (!order) {
     return NextResponse.json({ error: 'Pedido não encontrado.' }, { status: 404 });
   }
 
-  const payments = store.getPaymentsByOrderId(order.id);
+  const payments = await store.getPaymentsByOrderIdAsync(order.id);
   const currentPayment = payments[payments.length - 1];
 
   if (!currentPayment) {
     return NextResponse.json({ error: 'Nenhum Pix gerado para este pedido.' }, { status: 400 });
   }
 
-  const result = await handleLateWebhookPayment(currentPayment.providerPaymentId, order.amountCents);
+  const result = await handleLateWebhookPayment(
+    currentPayment.provider,
+    currentPayment.providerPaymentId,
+    order.amountCents
+  );
   return NextResponse.json(result);
 }
