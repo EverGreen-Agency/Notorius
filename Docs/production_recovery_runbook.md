@@ -18,13 +18,20 @@ Execute `Docs/supabase_reliability_migration.sql` uma vez no SQL Editor do Supab
 
 Use Node.js 22 ou superior no ambiente de build e execução.
 
-## 3. Retry de fulfillment
+## 3. Reconciliação de pagamentos e retry de fulfillment
 
-Agende uma chamada GET para `/api/cron/process-retries`. A Vercel envia automaticamente
-`Authorization: Bearer <CRON_SECRET>` quando o cron está configurado no projeto.
+O arquivo `vercel.json` agenda automaticamente uma chamada GET para
+`/api/cron/process-retries` a cada 5 minutos nos deploys de produção. A Vercel envia
+`Authorization: Bearer <CRON_SECRET>` quando a variável `CRON_SECRET` está configurada
+no projeto; não é necessário executar comandos por venda.
 
-Os intervalos de retry previstos são 30 segundos, 2 minutos e 10 minutos. Se o plano da
-Vercel não permitir execução frequente, use um agendador externo ou uma fila durável.
+A mesma execução consulta no Mercado Pago até 20 cobranças pendentes com mais de um minuto,
+recupera pagamentos cujos webhooks falharam e depois processa os retries de fulfillment. O fluxo é
+idempotente: repetir a chamada não duplica pedidos no Notorious.
+
+Os intervalos de retry de fulfillment previstos são 30 segundos, 2 minutos e 10 minutos. Planos
+Vercel que não aceitem cron a cada 5 minutos exigem um agendador externo ou upgrade do plano; o
+endpoint e a autenticação permanecem os mesmos.
 
 ## 4. Recuperar a venda existente
 

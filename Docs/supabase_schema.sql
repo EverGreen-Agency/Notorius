@@ -73,6 +73,9 @@ CREATE INDEX IF NOT EXISTS idx_payments_provider_payment_id ON public.payments(p
 CREATE UNIQUE INDEX IF NOT EXISTS uq_payments_provider_payment
   ON public.payments(provider, provider_payment_id);
 CREATE INDEX IF NOT EXISTS idx_payments_order_id ON public.payments(order_id);
+CREATE INDEX IF NOT EXISTS idx_payments_pending_reconciliation
+  ON public.payments(provider, created_at)
+  WHERE status = 'pending';
 CREATE INDEX IF NOT EXISTS idx_fulfillment_items_order_id ON public.fulfillment_items(order_id);
 CREATE INDEX IF NOT EXISTS idx_fulfillment_items_due_retry
   ON public.fulfillment_items(next_retry_at)

@@ -451,12 +451,15 @@ export async function handleLateWebhookPayment(
 
   if (valueCents !== order.amountCents || valueCents !== payment.amountCents) {
     await store.updateOrder(order.id, { paymentStatus: 'manual_review' });
-    await store.addEvent(
-      order.id,
-      'payment_mismatch_error',
-      `Valor esperado: ${order.amountCents} centavos; recebido: ${valueCents} centavos.`,
-      { provider, providerPaymentId }
-    );
+    if (payment.status !== 'failed') {
+      await store.updatePayment(payment.id, { status: 'failed' });
+      await store.addEvent(
+        order.id,
+        'payment_mismatch_error',
+        `Valor esperado: ${order.amountCents} centavos; recebido: ${valueCents} centavos.`,
+        { provider, providerPaymentId }
+      );
+    }
     return {
       success: false,
       retryable: false,

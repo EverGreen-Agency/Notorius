@@ -10,4 +10,8 @@ CREATE INDEX IF NOT EXISTS idx_fulfillment_items_due_retry
   ON public.fulfillment_items(next_retry_at)
   WHERE status = 'retry_scheduled';
 
+CREATE INDEX IF NOT EXISTS idx_payments_pending_reconciliation
+  ON public.payments(provider, created_at)
+  WHERE status = 'pending';
+
 COMMIT;

@@ -381,28 +381,167 @@ class ApplicationStore {
     return updated;
   }
 
+  /** Returns older pending payments for provider-side reconciliation. */
+  public async listPendingPaymentsForReconciliationAsync(
+    provider: PaymentProvider,
+    limit = 20,
+    createdBefore = new Date(Date.now() - 60_000)
+  ): Promise<PaymentRecord[]> {
+    this.assertPersistenceAvailable();
+    const safeLimit = Math.max(1, Math.min(limit, 100));
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('provider', provider)
+        .eq('status', 'pending')
+        .lte('created_at', createdBefore.toISOString())
+        .order('created_at', { ascending: true })
+        .limit(safeLimit);
+      this.assertDatabaseSuccess('Falha ao listar pagamentos pendentes', error);
+      const records = (data || []).map((row) => mapPayment(row as DatabaseRow));
+      records.forEach((record) => this.payments.set(record.id, record));
+      return records;
+    }
+
+    return Array.from(this.payments.values())
+      .filter(
+        (payment) =>
+          payment.provider === provider &&
+          payment.status === 'pending' &&
+          new Date(payment.createdAt).getTime() <= createdBefore.getTime()
+      )
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+      .slice(0, safeLimit);
+  }
+
+  /** Returns recent paid payments so interrupted order/fulfillment transitions can resume. */
+  public async listPaidPaymentsForRecoveryAsync(
+    provider: PaymentProvider,
+    limit = 100
+  ): Promise<PaymentRecord[]> {
+    this.assertPersistenceAvailable();
+    const safeLimit = Math.max(1, Math.min(limit, 100));
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('provider', provider)
+        .eq('status', 'paid')
+        .order('paid_at', { ascending: false })
+        .limit(safeLimit);
+      this.assertDatabaseSuccess('Falha ao listar pagamentos pagos para recuperação', error);
+      const records = (data || []).map((row) => mapPayment(row as DatabaseRow));
+      records.forEach((record) => this.payments.set(record.id, record));
+      return records;
+    }
+
+    return Array.from(this.payments.values())
+      .filter((payment) => payment.provider === provider && payment.status === 'paid')
+      .sort(
+        (a, b) =>
+          new Date(b.paidAt || b.createdAt).getTime() -
+          new Date(a.paidAt || a.createdAt).getTime()
+      )
+      .slice(0, safeLimit);
+  }
+
+  /** Atomically expires a payment only while it is still pending. */
+  public async tryMarkPaymentExpired(paymentId: string): Promise<PaymentRecord | undefined> {
+    this.assertPersistenceAvailable();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('payments')
+        .update({ status: 'expired' })
+        .eq('id', paymentId)
+        .eq('status', 'pending')
+        .select('*')
+        .maybeSingle();
+      this.assertDatabaseSuccess('Falha ao expirar pagamento', error);
+      if (!data) return undefined;
+      const updated = mapPayment(data as DatabaseRow);
+      this.payments.set(updated.id, updated);
+      return updated;
+    }
+
+    const existing = this.payments.get(paymentId);
+    if (!existing || existing.status !== 'pending') return undefined;
+    const updated: PaymentRecord = { ...existing, status: 'expired' };
+    this.payments.set(updated.id, updated);
+    return updated;
+  }
+
+  /** Atomically expires an order only while no payment has promoted it. */
+  public async tryMarkOrderExpired(orderId: string): Promise<OrderRecord | undefined> {
+    this.assertPersistenceAvailable();
+    const updatedAt = new Date().toISOString();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('orders')
+        .update({ payment_status: 'expired', updated_at: updatedAt })
+        .eq('id', orderId)
+        .eq('payment_status', 'pending')
+        .select('*')
+        .maybeSingle();
+      this.assertDatabaseSuccess('Falha ao expirar pedido', error);
+      if (!data) return undefined;
+      const updated = mapOrder(data as DatabaseRow);
+      this.orders.set(updated.id, updated);
+      return updated;
+    }
+
+    const existing = this.orders.get(orderId);
+    if (!existing || existing.paymentStatus !== 'pending') return undefined;
+    const updated: OrderRecord = { ...existing, paymentStatus: 'expired', updatedAt };
+    this.orders.set(updated.id, updated);
+    return updated;
+  }
+
   /** Marks one provider payment as paid exactly once. */
   public async tryMarkPaymentPaid(
     payment: PaymentRecord,
     paidAt: string
   ): Promise<PaymentRecord | undefined> {
     this.assertPersistenceAvailable();
-    const paidAfterExpiration = payment.status === 'expired';
     if (supabase) {
-      const { data, error } = await supabase
+      const expiredAttempt = await supabase
         .from('payments')
         .update({
           status: 'paid',
-          paid_after_expiration: paidAfterExpiration,
+          paid_after_expiration: true,
           paid_at: paidAt,
         })
         .eq('id', payment.id)
-        .in('status', ['pending', 'expired'])
+        .eq('status', 'expired')
         .select('*')
         .maybeSingle();
-      this.assertDatabaseSuccess('Falha ao confirmar pagamento do provedor', error);
-      if (!data) return undefined;
-      const updated = mapPayment(data as DatabaseRow);
+      this.assertDatabaseSuccess(
+        'Falha ao confirmar pagamento expirado do provedor',
+        expiredAttempt.error
+      );
+      if (expiredAttempt.data) {
+        const updated = mapPayment(expiredAttempt.data as DatabaseRow);
+        this.payments.set(updated.id, updated);
+        return updated;
+      }
+
+      const pendingAttempt = await supabase
+        .from('payments')
+        .update({
+          status: 'paid',
+          paid_after_expiration: false,
+          paid_at: paidAt,
+        })
+        .eq('id', payment.id)
+        .eq('status', 'pending')
+        .select('*')
+        .maybeSingle();
+      this.assertDatabaseSuccess(
+        'Falha ao confirmar pagamento pendente do provedor',
+        pendingAttempt.error
+      );
+      if (!pendingAttempt.data) return undefined;
+      const updated = mapPayment(pendingAttempt.data as DatabaseRow);
       this.payments.set(updated.id, updated);
       return updated;
     }
@@ -412,7 +551,7 @@ class ApplicationStore {
     const updated: PaymentRecord = {
       ...existing,
       status: 'paid',
-      paidAfterExpiration,
+      paidAfterExpiration: existing.status === 'expired',
       paidAt,
     };
     this.payments.set(updated.id, updated);
