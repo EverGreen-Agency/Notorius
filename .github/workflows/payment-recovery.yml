@@ -20,7 +20,7 @@ jobs:
       - name: Call protected recovery endpoint
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          PRODUCTION_URL: ${{ vars.PRODUCTION_URL || 'https://notorios.com.br' }}
+          PRODUCTION_URL: ${{ vars.PRODUCTION_URL || 'https://www.notorios.com.br' }}
         shell: bash
         run: |
           set -euo pipefail
