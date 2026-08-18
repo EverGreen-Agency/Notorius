@@ -1,31 +1,46 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import type { Group, Mesh, PerspectiveCamera, Points, Scene, WebGLRenderer } from 'three';
 import Image from 'next/image';
+
+const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+
+function subscribeToReducedMotion(onChange: () => void): () => void {
+  const mediaQuery = window.matchMedia(REDUCED_MOTION_QUERY);
+  mediaQuery.addEventListener('change', onChange);
+  return () => mediaQuery.removeEventListener('change', onChange);
+}
+
+function getReducedMotionSnapshot(): boolean {
+  return window.matchMedia(REDUCED_MOTION_QUERY).matches;
+}
+
+function getReducedMotionServerSnapshot(): boolean {
+  return false;
+}
 
 export function HeroMedallionScene() {
   const mountRef = useRef<HTMLDivElement>(null);
   const [webglSupported, setWebglSupported] = useState<boolean>(true);
-  const [reducedMotion, setReducedMotion] = useState<boolean>(false);
+  const reducedMotion = useSyncExternalStore(
+    subscribeToReducedMotion,
+    getReducedMotionSnapshot,
+    getReducedMotionServerSnapshot
+  );
 
   useEffect(() => {
-    // Check prefers-reduced-motion
-    if (typeof window !== 'undefined') {
-      const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-      if (mediaQuery.matches) {
-        setReducedMotion(true);
-        return;
-      }
-    }
+    if (reducedMotion || window.matchMedia(REDUCED_MOTION_QUERY).matches) return;
 
-    let animationFrameId: number;
-    let renderer: any;
-    let scene: any;
-    let camera: any;
-    let medallionGroup: any;
-    let ringOuter: any;
-    let ringInner: any;
-    let particlesMesh: any;
+    let animationFrameId: number | undefined;
+    let renderer: WebGLRenderer | undefined;
+    let scene: Scene | undefined;
+    let camera: PerspectiveCamera | undefined;
+    let medallionGroup: Group | undefined;
+    let ringOuter: Mesh | undefined;
+    let ringInner: Mesh | undefined;
+    let particlesMesh: Points | undefined;
+    const eventController = new AbortController();
 
     const container = mountRef.current;
     if (!container) return;
@@ -199,18 +214,22 @@ export function HeroMedallionScene() {
           targetY = (y / rect.height) * 0.6;
         };
 
-        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mousemove', handleMouseMove, {
+          signal: eventController.signal,
+        });
 
         // Handle Resize
         const handleResize = () => {
-          if (!container) return;
+          if (!camera || !renderer) return;
           const w = container.clientWidth;
           const h = container.clientHeight;
           camera.aspect = w / h;
           camera.updateProjectionMatrix();
           renderer.setSize(w, h);
         };
-        window.addEventListener('resize', handleResize);
+        window.addEventListener('resize', handleResize, {
+          signal: eventController.signal,
+        });
 
         // 8. Animation loop
         const timer = new THREE.Clock();
@@ -243,27 +262,28 @@ export function HeroMedallionScene() {
             particlesMesh.rotation.y = elapsedTime * 0.04;
           }
 
-          renderer.render(scene, camera);
+          if (renderer && scene && camera) renderer.render(scene, camera);
         };
 
         animate();
       } catch (err) {
         console.warn('WebGL initialization failed, falling back to 2D image:', err);
-        setWebglSupported(false);
+        if (isMounted) setWebglSupported(false);
       }
     }
 
-    initThree();
+    void initThree();
 
     return () => {
       isMounted = false;
-      if (animationFrameId) cancelAnimationFrame(animationFrameId);
-      if (renderer && renderer.domElement && container.contains(renderer.domElement)) {
+      eventController.abort();
+      if (animationFrameId !== undefined) cancelAnimationFrame(animationFrameId);
+      if (renderer?.domElement && container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
       }
-      if (renderer) renderer.dispose();
+      renderer?.dispose();
     };
-  }, []);
+  }, [reducedMotion]);
 
   if (reducedMotion || !webglSupported) {
     return (

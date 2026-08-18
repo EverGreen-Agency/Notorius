@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   ShieldAlert,
@@ -26,31 +26,47 @@ export default function AdminOrdersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterFulfillment, setFilterFulfillment] = useState<string>('all');
 
-  const [adminKey, setAdminKey] = useState<string>('');
+  const requestAdminOrders = useCallback(async (): Promise<DetailedAdminOrder[] | undefined> => {
+    const keyToUse =
+      typeof window !== 'undefined'
+        ? new URLSearchParams(window.location.search).get('key') || ''
+        : '';
+    const res = await fetch('/api/admin/orders', {
+      headers: {
+        'x-admin-key': keyToUse,
+      },
+    });
+    if (!res.ok) return undefined;
+    const data = await res.json();
+    return data.orders || [];
+  }, []);
 
-  const fetchAdminOrders = async () => {
+  useEffect(() => {
+    let cancelled = false;
+    requestAdminOrders()
+      .then((nextOrders) => {
+        if (!cancelled && nextOrders) setOrders(nextOrders);
+      })
+      .catch((error) => console.error(error))
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [requestAdminOrders]);
+
+  const refreshAdminOrders = async () => {
     setIsLoading(true);
     try {
-      const keyToUse = adminKey || (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('key') || '' : '');
-      const res = await fetch('/api/admin/orders', {
-        headers: {
-          'x-admin-key': keyToUse,
-        },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setOrders(data.orders || []);
-      }
-    } catch (err) {
-      console.error(err);
+      const nextOrders = await requestAdminOrders();
+      if (nextOrders) setOrders(nextOrders);
+    } catch (error) {
+      console.error(error);
     } finally {
       setIsLoading(false);
     }
   };
-
-  useEffect(() => {
-    fetchAdminOrders();
-  }, []);
 
   // Filter logic
   const filteredOrders = orders.filter(({ order }) => {
@@ -95,7 +111,9 @@ export default function AdminOrdersPage() {
           </div>
 
           <button
-            onClick={fetchAdminOrders}
+            onClick={() => {
+              void refreshAdminOrders();
+            }}
             className="px-4 py-2 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-xs text-white hover:border-white/20 transition-all flex items-center gap-2"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />

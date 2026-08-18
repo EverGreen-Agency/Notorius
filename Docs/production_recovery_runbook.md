@@ -20,18 +20,22 @@ Use Node.js 22 ou superior no ambiente de build e execução.
 
 ## 3. Reconciliação de pagamentos e retry de fulfillment
 
-O arquivo `vercel.json` agenda automaticamente uma chamada GET para
-`/api/cron/process-retries` a cada 5 minutos nos deploys de produção. A Vercel envia
-`Authorization: Bearer <CRON_SECRET>` quando a variável `CRON_SECRET` está configurada
-no projeto; não é necessário executar comandos por venda.
+O webhook do Mercado Pago é o caminho principal e processa vendas em tempo real. Como o plano
+Vercel Hobby aceita apenas cron diário, o arquivo `vercel.json` chama
+`/api/cron/process-retries` diariamente às 03:00 UTC como fallback adicional.
 
-A mesma execução consulta no Mercado Pago até 20 cobranças pendentes com mais de um minuto,
-recupera pagamentos cujos webhooks falharam e depois processa os retries de fulfillment. O fluxo é
-idempotente: repetir a chamada não duplica pedidos no Notorious.
+Para recuperar webhooks perdidos sem esperar até o dia seguinte, o workflow
+`.github/workflows/payment-recovery.yml` chama o mesmo endpoint a cada 5 minutos. Configure uma
+única vez no GitHub, em **Settings > Secrets and variables > Actions**:
 
-Os intervalos de retry de fulfillment previstos são 30 segundos, 2 minutos e 10 minutos. Planos
-Vercel que não aceitem cron a cada 5 minutos exigem um agendador externo ou upgrade do plano; o
-endpoint e a autenticação permanecem os mesmos.
+- secret `CRON_SECRET`: exatamente o mesmo valor configurado na Vercel;
+- variável opcional `PRODUCTION_URL`: origem HTTPS pública sem barra final. Na ausência dela, o
+  workflow usa `https://notorios.com.br`.
+
+A rota valida `Authorization: Bearer <CRON_SECRET>`, consulta no Mercado Pago até 20 cobranças
+pendentes, recupera pagamentos cujos webhooks falharam e depois processa retries de fulfillment.
+O fluxo é idempotente: execuções repetidas ou simultâneas não duplicam pedidos no Notorious.
+Não é necessário executar SQL ou cadastrar manualmente cada venda.
 
 ## 4. Recuperar a venda existente
 

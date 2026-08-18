@@ -1,0 +1,42 @@
+name: Recover payments and fulfillment
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+permissions: {}
+
+concurrency:
+  group: production-payment-recovery
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    name: Reconcile production
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call protected recovery endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          PRODUCTION_URL: ${{ vars.PRODUCTION_URL || 'https://notorios.com.br' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${CRON_SECRET}" ]; then
+            echo "Repository secret CRON_SECRET is required."
+            exit 1
+          fi
+          base_url="${PRODUCTION_URL%/}"
+          curl \
+            --fail-with-body \
+            --silent \
+            --show-error \
+            --retry 2 \
+            --retry-all-errors \
+            --connect-timeout 15 \
+            --max-time 240 \
+            --output /dev/null \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            "${base_url}/api/cron/process-retries"
