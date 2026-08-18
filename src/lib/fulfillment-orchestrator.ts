@@ -19,6 +19,7 @@ const COOLDOWN_MS = 6 * 60 * 60 * 1000;
 export interface PaymentProcessingResult {
   success: boolean;
   retryable: boolean;
+  requiresManualReview?: boolean;
   code:
     | 'processed'
     | 'already_processed'
@@ -463,6 +464,7 @@ export async function handleLateWebhookPayment(
     return {
       success: false,
       retryable: false,
+      requiresManualReview: true,
       code: 'amount_mismatch',
       message: 'Pagamento recebido com divergência de valor e enviado para revisão manual.',
       orderId: order.id,
@@ -476,16 +478,19 @@ export async function handleLateWebhookPayment(
     (candidate) => candidate.id !== payment.id && candidate.status === 'paid'
   );
 
-  if (order.paymentStatus === 'paid' && paymentTransition && anotherPaidPayment) {
-    await store.addEvent(
-      order.id,
-      'duplicate_payment_review',
-      `Pagamento adicional ${providerPaymentId} recebido para pedido já pago.`,
-      { provider, providerPaymentId, originalPaymentId: anotherPaidPayment.providerPaymentId }
-    );
+  if (anotherPaidPayment) {
+    if (paymentTransition) {
+      await store.addEvent(
+        order.id,
+        'duplicate_payment_review',
+        'Pagamento adicional recebido para pedido já pago.',
+        { provider, stage: 'payment_confirmation', code: 'duplicate_payment' }
+      );
+    }
     return {
       success: true,
       retryable: false,
+      requiresManualReview: true,
       code: 'duplicate_payment',
       message: 'Pagamento adicional registrado para revisão; fulfillment não foi duplicado.',
       orderId: order.id,
@@ -493,24 +498,6 @@ export async function handleLateWebhookPayment(
   }
 
   const orderTransition = await store.tryMarkOrderPaid(order.id);
-  if (!orderTransition && paymentTransition && anotherPaidPayment) {
-    const refreshedOrder = await store.getOrderAsync(order.id);
-    if (refreshedOrder?.paymentStatus === 'paid') {
-      await store.addEvent(
-        order.id,
-        'duplicate_payment_review',
-        `Pagamento adicional ${providerPaymentId} recebido simultaneamente para pedido já pago.`,
-        { provider, providerPaymentId, originalPaymentId: anotherPaidPayment.providerPaymentId }
-      );
-      return {
-        success: true,
-        retryable: false,
-        code: 'duplicate_payment',
-        message: 'Pagamento adicional registrado para revisão; fulfillment não foi duplicado.',
-        orderId: order.id,
-      };
-    }
-  }
 
   if (orderTransition) {
     await store.addEvent(

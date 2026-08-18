@@ -42,3 +42,6 @@ next-env.d.ts
 
 # local production database exports (PII and payment payloads)
 /Docs/Banco de Dados/
+
+# local incident exports (PII and payment payloads)
+/Supabase18-08/

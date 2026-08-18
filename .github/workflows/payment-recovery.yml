@@ -28,15 +28,93 @@ jobs:
             echo "Repository secret CRON_SECRET is required."
             exit 1
           fi
+
           base_url="${PRODUCTION_URL%/}"
-          curl \
+          response_file="$(mktemp)"
+          trap 'rm -f "${response_file}"' EXIT
+
+          set +e
+          http_code="$(curl \
             --fail-with-body \
             --silent \
             --show-error \
-            --retry 2 \
-            --retry-all-errors \
             --connect-timeout 15 \
             --max-time 240 \
-            --output /dev/null \
+            --output "${response_file}" \
+            --write-out "%{http_code}" \
             --header "Authorization: Bearer ${CRON_SECRET}" \
-            "${base_url}/api/cron/process-retries"
+            "${base_url}/api/cron/process-retries")"
+          curl_exit=$?
+          set -e
+
+          if ! jq -e . "${response_file}" >/dev/null 2>&1; then
+            echo "Recovery endpoint returned an invalid JSON response (HTTP ${http_code:-000})."
+            exit 1
+          fi
+
+          if [ "${curl_exit}" -ne 0 ] || [[ ! "${http_code}" =~ ^2[0-9][0-9]$ ]]; then
+            echo "Recovery request failed (curl=${curl_exit}, HTTP=${http_code:-000})."
+            exit 1
+          fi
+
+          if ! jq -e '
+            def nonnegint: type == "number" and . >= 0 and floor == .;
+            type == "object" and
+            .success == true and
+            (.timestamp | type == "string" and length > 0) and
+            (.paymentReconciliation | type == "object") and
+            (.paymentReconciliation.errors | type == "array") and
+            ([
+              .paymentReconciliation.checked,
+              .paymentReconciliation.recoveryScanned,
+              .paymentReconciliation.recovered,
+              .paymentReconciliation.paid,
+              .paymentReconciliation.expired,
+              .paymentReconciliation.stillPending,
+              .paymentReconciliation.manualReview,
+              .paymentReconciliation.failed
+            ] | all(.[]; nonnegint)) and
+            (.paymentReconciliation.failed == (.paymentReconciliation.errors | length)) and
+            (.paymentReconciliation.failed == 0) and
+            (.fulfillmentRetries | type == "object") and
+            ([.fulfillmentRetries.queued, .fulfillmentRetries.processed] | all(.[]; nonnegint)) and
+            (.errors | type == "array") and
+            (.errors | all(.[];
+              type == "object" and
+              (.component | type == "string" and length > 0) and
+              (.code | type == "string" and length > 0) and
+              ((has("count") | not) or (.count | nonnegint))
+            )) and
+            (.errors | length == 0)
+          ' "${response_file}" >/dev/null; then
+            echo "Recovery response failed the sanitized success contract."
+            exit 1
+          fi
+
+          echo "Sanitized recovery summary:"
+          jq '{
+            success,
+            timestamp,
+            paymentReconciliation: (
+              .paymentReconciliation
+              | {
+                  checked,
+                  recoveryScanned,
+                  recovered,
+                  paid,
+                  expired,
+                  stillPending,
+                  manualReview,
+                  failed
+                }
+            ),
+            fulfillmentRetries: (
+              .fulfillmentRetries | {queued, processed}
+            ),
+            errors: [.errors[] | {component, code, count}]
+          }' "${response_file}"
+
+          manual_review="$(jq -r '.paymentReconciliation.manualReview' "${response_file}")"
+          if [ "${manual_review}" -gt 0 ]; then
+            echo "::warning::Recovery completed with ${manual_review} payment(s) requiring manual review."
+          fi

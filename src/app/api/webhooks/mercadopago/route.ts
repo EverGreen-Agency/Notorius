@@ -1,14 +1,38 @@
+import { createHash, randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import {
   validateMercadoPagoWebhook,
   validateMercadoPagoWebhookSignature,
   getMercadoPagoPixStatus,
+  MercadoPagoStatusLookupError,
 } from '@/lib/mercadopago';
 import { handleLateWebhookPayment } from '@/lib/fulfillment-orchestrator';
+import { store, type IntegrationRunStatus } from '@/lib/store';
 
 export const runtime = 'nodejs';
 
+function correlationHash(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+function webhookErrorCode(error: unknown): string {
+  return error instanceof MercadoPagoStatusLookupError
+    ? error.code
+    : 'webhook_processing_failed';
+}
+
+async function finishWebhookRun(
+  runId: string,
+  status: IntegrationRunStatus,
+  counters: Record<string, number>,
+  errorCodes: string[]
+): Promise<void> {
+  await store.finishIntegrationRun(runId, status, counters, errorCodes);
+}
+
 export async function POST(request: Request) {
+  let integrationRunId: string | undefined;
+
   try {
     const url = new URL(request.url);
     let rawBody: unknown = {};
@@ -49,8 +73,21 @@ export async function POST(request: Request) {
       );
     }
 
+    const candidateRunId = `irun_${randomUUID()}`;
+    await store.createIntegrationRun({
+      id: candidateRunId,
+      trigger: 'mercadopago_webhook',
+      status: 'running',
+      correlationHash: correlationHash(webhook.paymentId),
+      counters: {},
+      errorCodes: [],
+      startedAt: new Date().toISOString(),
+    });
+    integrationRunId = candidateRunId;
+
     const verifiedPayment = await getMercadoPagoPixStatus(webhook.paymentId);
     if (verifiedPayment.status !== 'paid') {
+      await finishWebhookRun(integrationRunId, 'ignored', { verified: 1, paid: 0 }, []);
       return NextResponse.json({
         success: true,
         message: `Pagamento verificado com status ${verifiedPayment.status}.`,
@@ -63,11 +100,37 @@ export async function POST(request: Request) {
       verifiedPayment.valueCents,
       verifiedPayment.paidAt
     );
+    const status: IntegrationRunStatus = result.requiresManualReview
+      ? 'manual_review'
+      : result.success
+        ? 'succeeded'
+        : 'partial_failure';
+    await finishWebhookRun(
+      integrationRunId,
+      status,
+      {
+        verified: 1,
+        paid: 1,
+        processed: result.success ? 1 : 0,
+        manualReview: result.requiresManualReview ? 1 : 0,
+      },
+      result.success && !result.requiresManualReview ? [] : [result.code]
+    );
     return NextResponse.json(result, { status: result.retryable ? 503 : 200 });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error('[MERCADOPAGO WEBHOOK ERROR]:', message);
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    const code = webhookErrorCode(error);
+    console.error('[MERCADOPAGO WEBHOOK ERROR]:', code);
+    if (integrationRunId) {
+      try {
+        await finishWebhookRun(integrationRunId, 'partial_failure', {}, [code]);
+      } catch {
+        console.error('[MERCADOPAGO WEBHOOK AUDIT ERROR]: integration_audit_failed');
+      }
+    }
+    return NextResponse.json(
+      { success: false, error: 'Falha técnica ao processar webhook.', code },
+      { status: 500 }
+    );
   }
 }
 

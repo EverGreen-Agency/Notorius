@@ -130,6 +130,17 @@ export async function createMercadoPagoPix(req: CreatePixRequest): Promise<Creat
   };
 }
 
+export class MercadoPagoStatusLookupError extends Error {
+  constructor(
+    public readonly code: 'mercadopago_timeout' | 'mercadopago_http_error' | 'mercadopago_invalid_response',
+    public readonly retryable: boolean,
+    public readonly httpStatus?: number
+  ) {
+    super(code);
+    this.name = 'MercadoPagoStatusLookupError';
+  }
+}
+
 /**
  * Performs Zero-Trust payment status verification directly against Mercado Pago Server API.
  */
@@ -138,7 +149,6 @@ export async function getMercadoPagoPixStatus(paymentId: string): Promise<{
   status: string;
   valueCents: number;
   paidAt?: string;
-  rawResponse: Record<string, unknown>;
 }> {
   const token = getAccessToken();
 
@@ -148,26 +158,45 @@ export async function getMercadoPagoPixStatus(paymentId: string): Promise<{
       id: paymentId,
       status: 'paid',
       valueCents: Number(process.env.MERCADOPAGO_MOCK_AMOUNT_CENTS || 990),
-      rawResponse: { id: paymentId, status: 'approved', is_mock: true },
     };
   }
 
-  const response = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Mercado Pago status lookup error (${response.status}): ${errorText}`);
+  let response: Response;
+  try {
+    response = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json',
+      },
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (error) {
+    if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+      throw new MercadoPagoStatusLookupError('mercadopago_timeout', true);
+    }
+    throw new MercadoPagoStatusLookupError('mercadopago_http_error', true);
   }
 
-  const data = await response.json();
+  if (!response.ok) {
+    await response.body?.cancel();
+    const retryable = response.status === 408 || response.status === 429 || response.status >= 500;
+    throw new MercadoPagoStatusLookupError(
+      'mercadopago_http_error',
+      retryable,
+      response.status
+    );
+  }
+
+  let data: Record<string, unknown>;
+  try {
+    data = (await response.json()) as Record<string, unknown>;
+  } catch {
+    throw new MercadoPagoStatusLookupError('mercadopago_invalid_response', true);
+  }
+
   const rawStatus = String(data.status || '').toLowerCase();
-  
+
   // Normalize Mercado Pago statuses to system statuses ('approved' -> 'paid')
   let normalizedStatus = rawStatus;
   if (rawStatus === 'approved') {
@@ -185,8 +214,7 @@ export async function getMercadoPagoPixStatus(paymentId: string): Promise<{
     id: String(data.id || paymentId),
     status: normalizedStatus,
     valueCents,
-    paidAt: data.date_approved || undefined,
-    rawResponse: data,
+    paidAt: data.date_approved ? String(data.date_approved) : undefined,
   };
 }
 

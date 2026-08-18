@@ -64,7 +64,30 @@ export interface PaymentRecord {
   expiresAt: string;
   paidAfterExpiration?: boolean;
   paidAt?: string;
+  reconciliationAttemptCount?: number;
+  nextReconciliationAt?: string;
+  lastReconciledAt?: string;
+  lastReconciliationErrorCode?: string;
   createdAt: string;
+}
+
+export type IntegrationRunTrigger = 'cron_payment_recovery' | 'mercadopago_webhook';
+export type IntegrationRunStatus =
+  | 'running'
+  | 'succeeded'
+  | 'partial_failure'
+  | 'manual_review'
+  | 'ignored';
+
+export interface IntegrationRunRecord {
+  id: string;
+  trigger: IntegrationRunTrigger;
+  status: IntegrationRunStatus;
+  correlationHash?: string;
+  counters: Record<string, number>;
+  errorCodes: string[];
+  startedAt: string;
+  finishedAt?: string;
 }
 
 export interface FulfillmentItemRecord {
@@ -134,6 +157,10 @@ function mapPayment(row: DatabaseRow): PaymentRecord {
     expiresAt: String(row.expires_at),
     paidAfterExpiration: Boolean(row.paid_after_expiration),
     paidAt: optionalString(row.paid_at),
+    reconciliationAttemptCount: Number(row.reconciliation_attempt_count || 0),
+    nextReconciliationAt: optionalString(row.next_reconciliation_at),
+    lastReconciledAt: optionalString(row.last_reconciled_at),
+    lastReconciliationErrorCode: optionalString(row.last_reconciliation_error_code),
     createdAt: String(row.created_at),
   };
 }
@@ -176,6 +203,7 @@ class ApplicationStore {
   private payments = new Map<string, PaymentRecord>();
   private fulfillmentItems = new Map<string, FulfillmentItemRecord>();
   private events: OrderEventRecord[] = [];
+  private integrationRuns = new Map<string, IntegrationRunRecord>();
   private itemLocks = new Set<string>();
   private lastLowBalanceAlertAt: string | null = null;
   private lastBalanceAlertLevel: 'normal' | 'warning' | 'critical' = 'normal';
@@ -351,6 +379,10 @@ class ApplicationStore {
         expires_at: payment.expiresAt,
         paid_after_expiration: payment.paidAfterExpiration,
         paid_at: payment.paidAt,
+        reconciliation_attempt_count: payment.reconciliationAttemptCount || 0,
+        next_reconciliation_at: payment.nextReconciliationAt || payment.createdAt,
+        last_reconciled_at: payment.lastReconciledAt,
+        last_reconciliation_error_code: payment.lastReconciliationErrorCode,
         created_at: payment.createdAt,
       });
       this.assertDatabaseSuccess('Falha ao persistir o pagamento', error);
@@ -374,6 +406,18 @@ class ApplicationStore {
       if (updates.paidAfterExpiration !== undefined) {
         dbUpdates.paid_after_expiration = updates.paidAfterExpiration;
       }
+      if (updates.reconciliationAttemptCount !== undefined) {
+        dbUpdates.reconciliation_attempt_count = updates.reconciliationAttemptCount;
+      }
+      if ('nextReconciliationAt' in updates) {
+        dbUpdates.next_reconciliation_at = updates.nextReconciliationAt ?? null;
+      }
+      if ('lastReconciledAt' in updates) {
+        dbUpdates.last_reconciled_at = updates.lastReconciledAt ?? null;
+      }
+      if ('lastReconciliationErrorCode' in updates) {
+        dbUpdates.last_reconciliation_error_code = updates.lastReconciliationErrorCode ?? null;
+      }
       const { error } = await supabase.from('payments').update(dbUpdates).eq('id', id);
       this.assertDatabaseSuccess('Falha ao atualizar o pagamento', error);
     }
@@ -381,80 +425,177 @@ class ApplicationStore {
     return updated;
   }
 
-  /** Returns older pending payments for provider-side reconciliation. */
-  public async listPendingPaymentsForReconciliationAsync(
+  /** Atomically claims eligible pending payments so concurrent schedulers never share a batch. */
+  public async claimPendingPaymentsForReconciliationAsync(
     provider: PaymentProvider,
-    limit = 20,
-    createdBefore = new Date(Date.now() - 60_000)
+    limit = 10,
+    createdBefore = new Date(Date.now() - 60_000),
+    leaseSeconds = 240
   ): Promise<PaymentRecord[]> {
     this.assertPersistenceAvailable();
     const safeLimit = Math.max(1, Math.min(limit, 100));
+    const safeLeaseSeconds = Math.max(60, Math.min(leaseSeconds, 900));
+    const now = new Date();
+
     if (supabase) {
-      const { data, error } = await supabase
-        .from('payments')
-        .select('*')
-        .eq('provider', provider)
-        .eq('status', 'pending')
-        .lte('created_at', createdBefore.toISOString())
-        .order('created_at', { ascending: true })
-        .limit(safeLimit);
-      this.assertDatabaseSuccess('Falha ao listar pagamentos pendentes', error);
-      const records = (data || []).map((row) => mapPayment(row as DatabaseRow));
-      records.forEach((record) => this.payments.set(record.id, record));
+      const { data, error } = await supabase.rpc(
+        'claim_pending_payments_for_reconciliation',
+        {
+          p_provider: provider,
+          p_limit: safeLimit,
+          p_created_before: createdBefore.toISOString(),
+          p_lease_seconds: safeLeaseSeconds,
+        }
+      );
+      this.assertDatabaseSuccess('Falha ao reservar pagamentos para reconciliação', error);
+      const records: PaymentRecord[] = ((data || []) as DatabaseRow[]).map(
+        (row: DatabaseRow) => mapPayment(row)
+      );
+      records.forEach((record: PaymentRecord) => this.payments.set(record.id, record));
       return records;
     }
 
+    const leaseUntil = new Date(now.getTime() + safeLeaseSeconds * 1_000).toISOString();
     return Array.from(this.payments.values())
       .filter(
         (payment) =>
           payment.provider === provider &&
           payment.status === 'pending' &&
-          new Date(payment.createdAt).getTime() <= createdBefore.getTime()
+          new Date(payment.createdAt).getTime() <= createdBefore.getTime() &&
+          new Date(payment.nextReconciliationAt || payment.createdAt).getTime() <= now.getTime()
       )
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-      .slice(0, safeLimit);
+      .sort((a, b) => {
+        const dueDifference =
+          new Date(a.nextReconciliationAt || a.createdAt).getTime() -
+          new Date(b.nextReconciliationAt || b.createdAt).getTime();
+        return dueDifference || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      })
+      .slice(0, safeLimit)
+      .map((payment) => {
+        const claimed: PaymentRecord = {
+          ...payment,
+          reconciliationAttemptCount: (payment.reconciliationAttemptCount || 0) + 1,
+          lastReconciledAt: now.toISOString(),
+          nextReconciliationAt: leaseUntil,
+          lastReconciliationErrorCode: undefined,
+        };
+        this.payments.set(claimed.id, claimed);
+        return claimed;
+      });
   }
 
-  /** Returns recent paid payments so interrupted order/fulfillment transitions can resume. */
-  public async listPaidPaymentsForRecoveryAsync(
-    provider: PaymentProvider,
-    limit = 100
-  ): Promise<PaymentRecord[]> {
+  public async schedulePaymentReconciliationAsync(
+    payment: PaymentRecord,
+    nextReconciliationAt: string,
+    errorCode?: string
+  ): Promise<PaymentRecord | undefined> {
     this.assertPersistenceAvailable();
-    const safeLimit = Math.max(1, Math.min(limit, 100));
+    const expectedAttemptCount = payment.reconciliationAttemptCount || 0;
     if (supabase) {
       const { data, error } = await supabase
         .from('payments')
+        .update({
+          next_reconciliation_at: nextReconciliationAt,
+          last_reconciliation_error_code: errorCode || null,
+        })
+        .eq('id', payment.id)
+        .eq('status', payment.status)
+        .eq('reconciliation_attempt_count', expectedAttemptCount)
         .select('*')
-        .eq('provider', provider)
-        .eq('status', 'paid')
-        .order('paid_at', { ascending: false })
-        .limit(safeLimit);
-      this.assertDatabaseSuccess('Falha ao listar pagamentos pagos para recuperação', error);
-      const records = (data || []).map((row) => mapPayment(row as DatabaseRow));
-      records.forEach((record) => this.payments.set(record.id, record));
+        .maybeSingle();
+      this.assertDatabaseSuccess('Falha ao reagendar reconciliação do pagamento', error);
+      if (!data) return undefined;
+      const updated = mapPayment(data as DatabaseRow);
+      this.payments.set(updated.id, updated);
+      return updated;
+    }
+
+    const existing = this.payments.get(payment.id);
+    if (
+      !existing ||
+      existing.status !== payment.status ||
+      (existing.reconciliationAttemptCount || 0) !== expectedAttemptCount
+    ) return undefined;
+    const updated: PaymentRecord = {
+      ...existing,
+      nextReconciliationAt,
+      lastReconciliationErrorCode: errorCode,
+    };
+    this.payments.set(updated.id, updated);
+    return updated;
+  }
+
+  /** Atomically claims paid rows whose order transition/fulfillment is still incomplete. */
+  public async claimPaidPaymentsForRecoveryAsync(
+    provider: PaymentProvider,
+    limit = 10,
+    leaseSeconds = 900
+  ): Promise<PaymentRecord[]> {
+    this.assertPersistenceAvailable();
+    const safeLimit = Math.max(1, Math.min(limit, 100));
+    const safeLeaseSeconds = Math.max(300, Math.min(leaseSeconds, 1_800));
+    const now = new Date();
+
+    if (supabase) {
+      const { data, error } = await supabase.rpc('claim_paid_payment_recovery_candidates', {
+        p_provider: provider,
+        p_limit: safeLimit,
+        p_lease_seconds: safeLeaseSeconds,
+      });
+      this.assertDatabaseSuccess('Falha ao reservar pagamentos pagos para recuperação', error);
+      const records: PaymentRecord[] = ((data || []) as DatabaseRow[]).map(
+        (row: DatabaseRow) => mapPayment(row)
+      );
+      records.forEach((record: PaymentRecord) => this.payments.set(record.id, record));
       return records;
     }
 
+    const leaseUntil = new Date(now.getTime() + safeLeaseSeconds * 1_000).toISOString();
     return Array.from(this.payments.values())
-      .filter((payment) => payment.provider === provider && payment.status === 'paid')
-      .sort(
-        (a, b) =>
-          new Date(b.paidAt || b.createdAt).getTime() -
-          new Date(a.paidAt || a.createdAt).getTime()
-      )
-      .slice(0, safeLimit);
+      .filter((payment) => {
+        if (
+          payment.provider !== provider ||
+          payment.status !== 'paid' ||
+          new Date(payment.nextReconciliationAt || payment.createdAt).getTime() > now.getTime()
+        ) return false;
+        const order = this.orders.get(payment.orderId);
+        return Boolean(
+          order && (order.paymentStatus !== 'paid' || order.fulfillmentStatus === 'pending')
+        );
+      })
+      .sort((a, b) => {
+        const dueDifference =
+          new Date(a.nextReconciliationAt || a.createdAt).getTime() -
+          new Date(b.nextReconciliationAt || b.createdAt).getTime();
+        return dueDifference ||
+          new Date(a.paidAt || a.createdAt).getTime() -
+            new Date(b.paidAt || b.createdAt).getTime();
+      })
+      .slice(0, safeLimit)
+      .map((payment) => {
+        const claimed: PaymentRecord = {
+          ...payment,
+          reconciliationAttemptCount: (payment.reconciliationAttemptCount || 0) + 1,
+          lastReconciledAt: now.toISOString(),
+          nextReconciliationAt: leaseUntil,
+          lastReconciliationErrorCode: undefined,
+        };
+        this.payments.set(claimed.id, claimed);
+        return claimed;
+      });
   }
 
-  /** Atomically expires a payment only while it is still pending. */
-  public async tryMarkPaymentExpired(paymentId: string): Promise<PaymentRecord | undefined> {
+  /** Atomically expires the exact claimed payment attempt while it is still pending. */
+  public async tryMarkPaymentExpired(payment: PaymentRecord): Promise<PaymentRecord | undefined> {
     this.assertPersistenceAvailable();
+    const expectedAttemptCount = payment.reconciliationAttemptCount || 0;
     if (supabase) {
       const { data, error } = await supabase
         .from('payments')
         .update({ status: 'expired' })
-        .eq('id', paymentId)
+        .eq('id', payment.id)
         .eq('status', 'pending')
+        .eq('reconciliation_attempt_count', expectedAttemptCount)
         .select('*')
         .maybeSingle();
       this.assertDatabaseSuccess('Falha ao expirar pagamento', error);
@@ -464,8 +605,12 @@ class ApplicationStore {
       return updated;
     }
 
-    const existing = this.payments.get(paymentId);
-    if (!existing || existing.status !== 'pending') return undefined;
+    const existing = this.payments.get(payment.id);
+    if (
+      !existing ||
+      existing.status !== 'pending' ||
+      (existing.reconciliationAttemptCount || 0) !== expectedAttemptCount
+    ) return undefined;
     const updated: PaymentRecord = { ...existing, status: 'expired' };
     this.payments.set(updated.id, updated);
     return updated;
@@ -659,6 +804,64 @@ class ApplicationStore {
     this.itemLocks.delete(key);
   }
 
+  public async createIntegrationRun(run: IntegrationRunRecord): Promise<void> {
+    this.assertPersistenceAvailable();
+    if (supabase) {
+      const { error } = await supabase.from('integration_runs').insert({
+        id: run.id,
+        trigger: run.trigger,
+        status: run.status,
+        correlation_hash: run.correlationHash,
+        counters: run.counters,
+        error_codes: run.errorCodes,
+        started_at: run.startedAt,
+        finished_at: run.finishedAt,
+      });
+      this.assertDatabaseSuccess('Falha ao iniciar auditoria da integração', error);
+    }
+    this.integrationRuns.set(run.id, run);
+  }
+
+  public async finishIntegrationRun(
+    id: string,
+    status: IntegrationRunStatus,
+    counters: Record<string, number>,
+    errorCodes: string[],
+    finishedAt = new Date().toISOString()
+  ): Promise<void> {
+    this.assertPersistenceAvailable();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('integration_runs')
+        .update({
+          status,
+          counters,
+          error_codes: errorCodes,
+          finished_at: finishedAt,
+        })
+        .eq('id', id)
+        .select('id')
+        .maybeSingle();
+      this.assertDatabaseSuccess('Falha ao concluir auditoria da integração', error);
+      if (!data) {
+        throw new Error('Execução de auditoria da integração não encontrada');
+      }
+    }
+    const existing = this.integrationRuns.get(id);
+    if (!supabase && !existing) {
+      throw new Error('Execução de auditoria da integração não encontrada');
+    }
+    if (existing) {
+      this.integrationRuns.set(id, {
+        ...existing,
+        status,
+        counters,
+        errorCodes,
+        finishedAt,
+      });
+    }
+  }
+
   public async addEvent(
     orderId: string,
     type: string,
@@ -770,8 +973,10 @@ class ApplicationStore {
         .eq('order_id', orderId)
         .order('created_at', { ascending: true });
       this.assertDatabaseSuccess('Falha ao listar pagamentos do pedido', error);
-      const records = (data || []).map((row) => mapPayment(row as DatabaseRow));
-      records.forEach((record) => this.payments.set(record.id, record));
+      const records: PaymentRecord[] = ((data || []) as DatabaseRow[]).map(
+        (row: DatabaseRow) => mapPayment(row)
+      );
+      records.forEach((record: PaymentRecord) => this.payments.set(record.id, record));
       return records;
     }
     return Array.from(this.payments.values()).filter((payment) => payment.orderId === orderId);
